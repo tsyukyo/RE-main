@@ -144,9 +144,6 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .chip.n { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
 .chip.w { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
 .pv-note { font-size: 12px; color: var(--fg2); }
-.pv-ask { display: grid; gap: 6px; font-size: 13px; color: var(--fg2); }
-.pv-ask-b { max-height: min(34svh, 42vh); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 8px; margin-inline: -4px; padding: 0 4px 2px; }
-.pv-ask button { font-size: 15px; min-height: 40px; padding: 0 15px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; }
 .wg { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .wg-h { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--fg2); letter-spacing: .04em; margin-bottom: -2px; }
 .chat-in .chips.when { display: grid; gap: 10px; max-height: min(34svh, 42vh); overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
@@ -244,6 +241,8 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .f { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 46px; position: relative; }
 .f + .f::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
 .f > label, .f > .lab { flex: 1; min-width: 0; }
+.newlist { gap: 8px; }
+.newlist .nl-ok { flex: none; min-height: 36px; padding: 0 14px; border-radius: 999px; background: var(--blue); color: #fff; font-weight: 600; font-size: 15px; }
 .f input[type=text], .f textarea { width: 100%; border: 0; background: transparent; outline: none; padding: 12px 0; font-size: 17px; }
 .f textarea { resize: none; min-height: 64px; font-size: 16px; }
 .f input[type=date], .f input[type=time], .f input[type=datetime-local], .f input[type=number], .f select {
@@ -303,9 +302,9 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 
 /* 押した感触（ui-ux-pro-max: press-feedback / scale-feedback / spring-physics）
    押した瞬間に 80ms で縮み、離すとばねで戻る。レイアウトは動かさない */
-.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn {
+.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn {
   transition: transform .5s var(--spring), background-color .25s var(--ease-out), color .25s, box-shadow .25s var(--ease-out), opacity .3s var(--ease-out), filter .3s var(--ease-out); }
-:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
+:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
 .tile.is-pressed { transform: scale(.94); filter: grayscale(1); background-color: color-mix(in srgb, var(--card) 85%, var(--fg)); transition-duration: var(--t-press); }
 .tile .ic { transition: transform .55s var(--spring); }
 .tile.is-pressed .ic { transform: scale(1.15) rotate(-8deg); transition-duration: .15s; }
@@ -619,8 +618,8 @@ function dropUnder(u) { if (u) u.remove(); $('#app').classList.remove('swiping')
 })();
 // 触覚フィードバック。Android は vibrate、iOS 18 以降の Safari はスイッチ型チェックボックスの切り替えで軽く震える
 // 押した感触: 指が触れた瞬間に縮め、離すと少し膨らんで戻す。速いタップでも最低 100ms は見せる
-const PRESS_SEL = '.pill, .sw-btn, .newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .navbtn, .lrow, .btn, .row-main, .check';
-const BOUNCE_SEL = '.pill, .navbtn, .addlist, .seg button, .newbtn, .send, .linkbtn, .tile, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .wd button, .colors button, .pv-ask button';
+const PRESS_SEL = '.nl-ok, .pill, .sw-btn, .newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .navbtn, .lrow, .btn, .row-main, .check';
+const BOUNCE_SEL = '.pill, .navbtn, .addlist, .seg button, .newbtn, .send, .linkbtn, .tile, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .wd button, .colors button, .nl-ok';
 (() => {
   let cur = null, t0 = 0, sx = 0, sy = 0;
   const release = (bounce) => {
@@ -904,8 +903,7 @@ function updatePreview() {
   const url = normUrl($('#quickUrl').value) || normUrl(p.url);
   pv.hidden = false;
   // 日時が読み取れないときは、リマインくんのように聞き返す代わりにワンタップの候補を出す
-  const ask = !p.due ? `<div class="pv-ask"><div class="pv-ask-h">いつ通知する？</div><div class="pv-ask-b">${whenChips('data-append')}</div></div>` : '';
-  pv.innerHTML = `<div class="pv-title">${esc(p.title)}</div><div class="chips">${interpretation(p, url)}</div>${ask}${p.notes.length ? `<div class="pv-note">${esc(p.notes.filter(n => n !== '相対時刻').join(' / '))}</div>` : ''}`;
+  pv.innerHTML = `<div class="pv-title">${esc(p.title)}</div><div class="chips">${interpretation(p, url)}</div>${p.notes.length ? `<div class="pv-note">${esc(p.notes.filter(n => n !== '相対時刻').join(' / '))}</div>` : ''}`;
 }
 // 通知時間の候補。今日の時刻は過ぎたものを出さない
 function whenGroups(now = new Date()) {
@@ -919,14 +917,10 @@ function whenGroups(now = new Date()) {
     ['今日', today],
     ['明日', [['7:00', '明日 朝7時'], ['8:00', '明日 朝8時'], ['9:00', '明日 9時'], ['12:00', '明日 12時'], ['18:00', '明日 18時'], ['21:00', '明日 21時']]],
     ['今週・来週', wk.filter(([l]) => !l.startsWith(WDN[now.getDay()]))],
-    ['くり返し', [['毎朝 7:00', '毎日 朝7時'], ['毎朝 8:00', '毎日 朝8時'], ['毎晩 21:00', '毎日 21時'], ['平日 8:00', '平日 8時'], ['毎週月曜 9:00', '毎週月曜 9時'], ['隔週月曜 9:00', '隔週月曜 9時'], ['毎月1日 9:00', '毎月1日 9時'], ['毎月末 9:00', '毎月末 9時']]],
+    ['くり返し', [['毎朝 7:00', '毎日 朝7時'], ['毎朝 8:00', '毎日 朝8時'], ['毎晩 21:00', '毎日 21時'], ['1日おき 8:00', '1日おき 8時'], ['2日おき 8:00', '2日おき 8時'], ['平日 8:00', '平日 8時'], ['毎週月曜 9:00', '毎週月曜 9時'], ['隔週月曜 9:00', '隔週月曜 9時'], ['毎月1日 9:00', '毎月1日 9時'], ['毎月末 9:00', '毎月末 9時']]],
   ].filter(([, a]) => a.length);
 }
 const whenChips = (attr, now) => whenGroups(now).map(([g, a]) => `<div class="wg"><span class="wg-h">${g}</span>${a.map(([l, t]) => `<button type="button" ${attr}="${esc(t)}">${esc(l)}</button>`).join('')}</div>`).join('');
-$('#preview').addEventListener('click', e => {
-  const b = e.target.closest('[data-append]'); if (!b) return;
-  const q = $('#quick'); q.value = b.dataset.append + ' ' + q.value.trim(); updatePreview(); q.focus();
-});
 $('#quick').addEventListener('input', updatePreview);
 $('#quickUrl').addEventListener('input', () => { $('#linkBtn').classList.toggle('has', !!$('#quickUrl').value.trim()); updatePreview(); });
 $('#linkBtn').addEventListener('click', () => {
@@ -1177,6 +1171,23 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet
 const sheetHead = (title, right = '完了', left = 'キャンセル') => `<div class="sheet-h gut">${left ? `<button class="navbtn" data-act="cancel">${left}</button>` : '<span></span>'}<div class="t">${title}</div>${right ? `<button class="navbtn r" data-act="ok">${right}</button>` : '<span></span>'}</div>`;
 
 // ---- 詳細編集 ----
+// 繰り返しの間隔の選択肢。「1日おき」は2日ごと（隔日）
+function ivLabel(kind, n) {
+  switch (kind) {
+    case 'daily': return n === 1 ? '毎日' : `${n - 1}日おき（${n}日ごと）`;
+    case 'weekly': return n === 1 ? '毎週' : n === 2 ? '隔週（2週ごと）' : `${n}週ごと`;
+    case 'monthly': case 'monthlyNth': return n === 1 ? '毎月' : `${n}ヶ月ごと`;
+    case 'yearly': return n === 1 ? '毎年' : `${n}年ごと`;
+    case 'hourly': return n === 1 ? '毎時' : `${n}時間ごと`;
+    case 'minutely': return `${n}分ごと`;
+    default: return String(n);
+  }
+}
+function ivOptions(kind, cur) {
+  const max = { daily: 30, weekly: 12, monthly: 12, monthlyNth: 12, yearly: 10, hourly: 24, minutely: 60 }[kind] || 60;
+  const ns = Array.from({ length: max }, (_, i) => i + 1); if (cur > max) ns.push(cur);
+  return ns.map(n => `<option value="${n}" ${n === +cur ? 'selected' : ''}>${ivLabel(kind, n)}</option>`).join('');
+}
 function ruleKind(r) {
   if (!r) return 'none';
   if (r.freq === 'monthly') return r.byNth ? 'monthlyNth' : 'monthly';
@@ -1208,7 +1219,7 @@ function openDetail(id, opts = {}) {
       <div class="f"><span class="lab">繰り返し</span><select id="dKind">
         ${opt('none', 'しない', k)}${opt('daily', '日ごと（毎日・隔日・N日）', k)}${opt('weekly', '週ごと（曜日・隔週）', k)}${opt('monthly', '月ごと（日付・末日）', k)}${opt('monthlyNth', '月ごと（第N曜日）', k)}${opt('yearly', '毎年', k)}${opt('parity', '偶数日・奇数日', k)}${opt('hourly', '時間ごと', k)}${opt('minutely', '分ごと', k)}${opt('afterDone', '完了してから', k)}
       </select></div>
-      <div class="f" ${show('daily weekly monthly monthlyNth yearly hourly minutely afterDone')}><span class="lab" id="dIvLab">間隔</span><input type="number" id="dIv" min="1" max="999" value="${rule ? rule.interval || 1 : 1}"><span class="val" id="dIvUnit"></span>
+      <div class="f" ${show('daily weekly monthly monthlyNth yearly hourly minutely afterDone')}><span class="lab" id="dIvLab">間隔</span><select id="dIv">${ivOptions(k, rule ? rule.interval || 1 : 1)}</select><span class="val" id="dIvUnit"></span>
         <select id="dUnit" ${show('afterDone')}>${['minute', 'hour', 'day', 'week', 'month', 'year'].map(u => opt(u, UNIT_LABEL[u] + '後', rule && rule.unit || 'day')).join('')}</select></div>
       <div ${show('weekly')}><div class="wd">${wdBtns('by', byDay)}</div></div>
       <div class="f" ${show('monthly')}><span class="lab">日付（カンマ区切り、末日は -1）</span><input type="text" id="dMd" style="max-width:40%;text-align:right" value="${rule && rule.byMonthDay ? rule.byMonthDay.join(',') : (r.due ? +r.due.slice(8, 10) : 1)}"></div>
@@ -1230,7 +1241,7 @@ function openDetail(id, opts = {}) {
     <div><div class="fgroup">
       <div class="f"><label for="dFlag">フラグ</label><input type="checkbox" class="switch" id="dFlag" ${r.flagged ? 'checked' : ''}></div>
       <div class="f"><span class="lab">優先順位</span><select id="dPri">${[0, 1, 2, 3].map(n => opt(n, ['なし', '低 (!)', '中 (!!)', '高 (!!!)'][n], r.priority || 0)).join('')}</select></div>
-      <div class="f"><span class="lab">リスト</span><select id="dList">${S.lists.map(l => opt(l.id, esc(l.name), r.list)).join('')}</select></div>
+      ${listPicker('dList', r.list)}
     </div></div>
     ${r.input ? `<div class="fgroup-f" style="margin-top:-12px">登録時の入力: 「${esc(r.input)}」</div>` : ''}
     ${isNew ? `<button class="btn center" id="dRegister" style="background:var(--blue);color:#fff;border-radius:12px;font-weight:600">この内容で登録</button>` : ''}
@@ -1274,7 +1285,7 @@ function openDetail(id, opts = {}) {
     const refresh = (recalcDue) => {
       const kind = g('dKind').value;
       sh.querySelectorAll('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(' ').includes(kind); });
-      g('dIvUnit').textContent = { daily: '日ごと', weekly: '週ごと', monthly: 'ヶ月ごと', monthlyNth: 'ヶ月ごと', yearly: '年ごと', hourly: '時間ごと', minutely: '分ごと', afterDone: '' }[kind] || '';
+      if (g('dIv').dataset.kind !== kind) { g('dIv').innerHTML = ivOptions(kind, +g('dIv').value || 1); g('dIv').dataset.kind = kind; }
       g('dNagRow').hidden = !g('dNag').checked;
       const nr = buildRule();
       if (recalcDue && nr && DATE_FREQS.includes(nr.freq)) {
@@ -1309,7 +1320,7 @@ function openDetail(id, opts = {}) {
       const kind = ruleKind(p.rule); g('dKind').value = kind;
       if (p.rule) {
         const pr = p.rule;
-        g('dIv').value = pr.interval || 1;
+        g('dIv').innerHTML = ivOptions(kind, pr.interval || 1); g('dIv').dataset.kind = kind;
         if (pr.times) g('dTimes').value = pr.times.join(', ');
         sh.querySelectorAll('[data-wd]').forEach(b => {
           const set = b.dataset.wd === 'by' ? (pr.byDay || []) : (pr.onlyDays || []);
@@ -1397,7 +1408,7 @@ function openGroupEditor(id, opts = {}) {
       <div class="inl"><input type="text" id="gBulk" placeholder="まとめて追加: 埼玉、群馬、栃木" aria-label="まとめて追加"><button type="button" id="gBulkGo">追加</button></div>
     </div><div class="gsum" id="gSum"></div></div>
     <div><div class="fgroup">
-      <div class="f"><span class="lab">リスト</span><select id="gList">${S.lists.map(l => `<option value="${l.id}" ${G.list === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>
+      ${listPicker('gList', G.list)}
       <div class="f"><label for="gFlag">フラグ</label><input type="checkbox" class="switch" id="gFlag" ${G.flagged ? 'checked' : ''}></div>
     </div></div>
     <div class="msg err" id="gErr" style="padding:0 4px"></div>
@@ -1490,6 +1501,31 @@ $('#newGroupBtn').addEventListener('click', () => {
 });
 
 // ---- リスト編集 ----
+// リストの選択欄。「新しいリスト」を選ぶと、その場で作ってそのリストに入れられる
+function listPicker(id, cur) {
+  return `<div class="f"><span class="lab">リスト</span><select id="${id}" data-listsel>${S.lists.map(l => `<option value="${l.id}" ${l.id === cur ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}<option value="__new">＋ 新しいリスト…</option></select></div>
+    <div class="f newlist" hidden><input type="text" placeholder="新しいリストの名前" aria-label="新しいリストの名前" enterkeyhint="done"><button type="button" class="nl-ok">作成</button></div>`;
+}
+document.addEventListener('change', e => {
+  const sel = e.target.closest('select[data-listsel]'); if (!sel) return;
+  if (sel.value !== '__new') { sel.dataset.cur = sel.value; return; }
+  e.stopImmediatePropagation();
+  sel.value = sel.dataset.cur || [...sel.options][0].value;
+  const row = sel.closest('.f').nextElementSibling; row.hidden = false; row.querySelector('input').focus();
+}, true);
+document.addEventListener('focusin', e => { const sel = e.target.closest('select[data-listsel]'); if (sel && sel.value !== '__new') sel.dataset.cur = sel.value; });
+function createListFrom(row) {
+  const inp = row.querySelector('input'), name = inp.value.trim(); if (!name) { inp.focus(); return; }
+  const used = S.lists.map(l => l.color), color = COLORS.find(c => !used.includes(c)) || COLORS[S.lists.length % COLORS.length];
+  const l = { id: uid(), name, color }; S.lists.push(l); save();
+  const sel = row.previousElementSibling.querySelector('select');
+  sel.querySelector('option[value="__new"]').insertAdjacentHTML('beforebegin', `<option value="${l.id}">${esc(name)}</option>`);
+  sel.value = l.id; sel.dataset.cur = l.id; inp.value = ''; row.hidden = true;
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  toast(`リスト「${esc(name)}」を作りました`);
+}
+document.addEventListener('click', e => { const b = e.target.closest('.newlist .nl-ok'); if (b) createListFrom(b.closest('.newlist')); });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.target.closest('.newlist input')) { e.preventDefault(); createListFrom(e.target.closest('.newlist')); } });
 function openListEditor(listId) {
   const l = listId ? listById(listId) : { id: null, name: '', color: 'green' };
   let color = l.color;

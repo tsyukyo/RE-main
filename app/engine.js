@@ -189,7 +189,7 @@ function describeRule(r) {
   const iv = r.interval || 1;
   let s = '';
   switch (r.freq) {
-    case 'daily': s = iv === 1 ? '毎日' : iv === 2 ? '隔日' : `${iv}日ごと`; break;
+    case 'daily': s = iv === 1 ? '毎日' : iv === 2 ? '隔日（1日おき）' : `${iv - 1}日おき（${iv}日ごと）`; break;
     case 'weekly': {
       const p = iv === 1 ? '毎週' : iv === 2 ? '隔週' : `${iv}週ごと`;
       const dl = daysLabel(r.byDay && r.byDay.length ? r.byDay : [parseLocal(r.start + 'T00:00').getDay()]);
