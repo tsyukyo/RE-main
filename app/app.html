@@ -135,6 +135,8 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .bub.me .tx { background: var(--blue); color: #fff; border-bottom-right-radius: 6px; }
 .bub .sub { display: block; font-size: 13px; color: var(--fg2); margin-top: 3px; }
 .bub.pop { animation: pop .5s var(--spring) both; transform-origin: bottom left; }
+.bub.bot.pop .tx { animation: grow .45s .5s var(--spring) both; transform-origin: left center; }
+@keyframes grow { from { transform: scale(.96); } }
 .bub.me.pop { transform-origin: bottom right; }
 @keyframes pop { from { transform: translateY(10px) scale(.9); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bub.pop { animation: none; } }
@@ -262,26 +264,70 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 
 /* 押した感触（ui-ux-pro-max: press-feedback / scale-feedback / spring-physics）
    押した瞬間に 80ms で縮み、離すとばねで戻る。レイアウトは動かさない */
-.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code {
-  transition: transform .5s var(--spring), background-color .2s var(--ease-out), color .2s, box-shadow .25s var(--ease-out), opacity .2s; }
-:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code):active:not(:disabled) { transform: scale(.92); transition-duration: var(--t-press); }
-.tile:active { transform: scale(.96); transition-duration: var(--t-press); }
-.send:active:not(:disabled) { transform: scale(.86); }
-.navbtn { transition: opacity .25s var(--ease-out); }
-.navbtn:active { opacity: .4; transition-duration: var(--t-press); }
+.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn {
+  transition: transform .5s var(--spring), background-color .25s var(--ease-out), color .25s, box-shadow .25s var(--ease-out), opacity .3s var(--ease-out), filter .3s var(--ease-out); }
+:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
+.tile.is-pressed { transform: scale(.94); filter: grayscale(1); background-color: color-mix(in srgb, var(--card) 85%, var(--fg)); transition-duration: var(--t-press); }
+.tile .ic { transition: transform .55s var(--spring); }
+.tile.is-pressed .ic { transform: scale(1.15) rotate(-8deg); transition-duration: .15s; }
+.send.is-pressed:not(:disabled) { transform: scale(.8); }
+.navbtn { transition: opacity .25s var(--ease-out), transform .45s var(--spring); }
+.navbtn.is-pressed { opacity: .3; filter: grayscale(1); transform: scale(.88); transition-duration: var(--t-press); }
+/* 離した直後にふわっと膨らみ、まわりに淡い光の輪が広がって消える */
+.released { animation: release .55s var(--spring); }
+@keyframes release {
+  0% { transform: scale(.9); box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 35%, transparent); }
+  45% { transform: scale(1.08); }
+  100% { transform: scale(1); box-shadow: 0 0 0 14px transparent; } }
+.tile.released { animation-name: releaseTile; }
+@keyframes releaseTile { 0% { transform: scale(.94); } 50% { transform: scale(1.04); } 100% { transform: scale(1); } }
 .lrow, .btn { transition: background-color .3s var(--ease-out); }
-.lrow:active, .btn:active { background-color: var(--fill); transition-duration: 0s; }
+.lrow.is-pressed, .btn.is-pressed { background-color: var(--fill); transition-duration: 0s; }
 .row-main { transition: opacity .3s var(--ease-out); }
-.row-main:active { opacity: .55; transition-duration: var(--t-press); }
-.check { transition: background .15s, border-color .15s, transform .5s var(--spring); }
-.check:active { transform: scale(.85); transition-duration: var(--t-press); }
-.check.on { animation: checkPop .55s var(--spring); }
+.row-main.is-pressed { opacity: .5; transition-duration: var(--t-press); }
+.check { position: relative; transition: background .15s, border-color .15s, transform .5s var(--spring); }
+.check.is-pressed { transform: scale(.8); transition-duration: var(--t-press); }
+/* 完了: 丸が塗りつぶされ、白いチェックが描かれ、輪が広がる */
+.check.on { animation: checkPop .6s var(--spring); background: var(--c); border-color: var(--c); }
+.check.on::after { width: 12px; height: 7px; border-radius: 0; background: transparent; border: solid #fff; border-width: 0 0 2.5px 2.5px; transform: translateY(-1px) rotate(-45deg); animation: tick .3s .08s var(--ease-out) both; }
+@keyframes tick { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.check.on::before { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--c); animation: ring .6s var(--ease-out) forwards; pointer-events: none; }
+@keyframes ring { from { transform: scale(1); opacity: .9; } to { transform: scale(2.4); opacity: 0; } }
 @keyframes checkPop {
   0% { transform: scale(.8); box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 45%, transparent); }
   45% { transform: scale(1.18); }
   100% { transform: scale(1); box-shadow: 0 0 0 12px transparent; } }
-.row.leaving { animation: rowOut .28s var(--ease-in) forwards; pointer-events: none; }
-@keyframes rowOut { to { opacity: 0; transform: translateX(28px); } }
+/* 行のスワイプ: 右で完了、左で操作ボタン */
+.swipe { position: relative; overflow: hidden; }
+.swipe > .row { background: var(--bg); touch-action: pan-y; z-index: 1; }
+.swipe > .row.settle { transition: transform .5s var(--spring); }
+.sw-l, .sw-r { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; visibility: hidden; }
+.swipe[data-dir="r"] .sw-l, .swipe[data-dir="l"] .sw-r { visibility: visible; }
+.sw-l { left: 0; right: 0; padding-left: 18px; gap: 8px; background: var(--fg3); color: #fff; font-weight: 700; font-size: 15px; transition: background-color .2s; }
+.sw-l svg { width: 22px; height: 22px; transition: transform .45s var(--spring); }
+.swipe.armed .sw-l { background: var(--green); }
+.swipe.armed .sw-l svg { transform: scale(1.3); }
+.sw-r { right: 0; }
+.sw-btn { width: 72px; height: 100%; color: #fff; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: var(--c); }
+.sw-btn svg { width: 20px; height: 20px; }
+.row.leaving { pointer-events: none; }
+.row.leaving .row-title { color: var(--fg2); transition: color .2s; }
+/* 一覧を開いたとき、行が上から順にふわっと並ぶ */
+.stagger > * { animation: rise .5s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 32ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+/* 送信: 矢印が上へ飛んでいき、下から戻ってくる */
+.send.launch svg { animation: launch .5s var(--ease-out); }
+@keyframes launch { 0% { transform: none; } 40% { transform: translateY(-26px); opacity: 0; } 41% { transform: translateY(18px); opacity: 0; } 100% { transform: none; opacity: 1; } }
+/* シートが開いている間、奥の画面が少し下がって小さくなる（iOS のシートと同じ奥行き） */
+html, :root.sheet-open body { background: #000; }
+.app { transition: transform .5s var(--ease-sheet), border-radius .5s var(--ease-sheet), filter .5s; transform-origin: 50% 100%; }
+:root.sheet-open .app { transform: scale(.93) translateY(calc(env(safe-area-inset-top, 0px) + 6px)); border-radius: 14px; overflow: hidden; filter: brightness(.85); }
+:root.sheet-open.kb .app { transform: none; border-radius: 0; filter: none; }
+/* 会話の返事は「…」と入力中を見せてから出る */
+.bub.bot.pop .tx { position: relative; }
+.bub.bot.pop .tx::after { content: ""; position: absolute; inset: 0; border-radius: inherit; animation: typing .55s steps(1) forwards;
+  background: radial-gradient(circle, var(--fg2) 3.5px, transparent 4px) 12px 50% / 10px 10px no-repeat, radial-gradient(circle, var(--fg2) 3.5px, transparent 4px) 26px 50% / 10px 10px no-repeat, radial-gradient(circle, var(--fg2) 3.5px, transparent 4px) 40px 50% / 10px 10px no-repeat, var(--card); }
+@keyframes typing { 0%, 99% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
 .row.flash { animation: rowFlash 1.4s var(--ease-out); border-radius: 10px; }
 @keyframes rowFlash { 0%, 30% { background: color-mix(in srgb, var(--blue) 14%, transparent); } 100% { background: transparent; } }
 .switch::after { transition: transform .4s var(--spring), width .2s; }
@@ -303,8 +349,12 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 :root.kb .composer, :root.kb .chat-in { padding-bottom: 8px; }
 :root.kb .sheet-b { padding-bottom: 16px; }
 
+/* 視差効果を減らす: 動きは止め、色と透明度の変化だけ残す（画面遷移はクロスフェード） */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after, ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-property: opacity, background-color, color, border-color, filter, box-shadow !important; }
+  .is-pressed { transform: none !important; opacity: .6; }
+  .bub.bot.pop .tx::after { display: none; }
+  :root.sheet-open .app { transform: none; border-radius: 0; } }
 </style>
 
 <div class="app" id="app">
@@ -440,6 +490,7 @@ function sortRems(arr) {
 
 // ---- 描画 ----
 function render() {
+  swOpen = null;
   const sc = $('#scroll');
   const back = $('#backBtn'), nt = $('#navTitle');
   if (view.name === 'home') {
@@ -462,8 +513,8 @@ let homeScroll = 0;
 function navigate(v, dir, opts = {}) {
   const sc = $('#scroll');
   if (dir === 'fwd' && view.name === 'home') homeScroll = sc.scrollTop;
-  const swap = () => { view = v; render(); sc.scrollTop = dir === 'back' ? homeScroll : 0; };
-  if (reduceMotion()) return swap();
+  const swap = () => { view = v; render(); sc.scrollTop = dir === 'back' ? homeScroll : 0; if (dir === 'fwd') staggerIn(sc); };
+  if (reduceMotion()) return document.startViewTransition ? void document.startViewTransition(swap) : swap();
   if (document.startViewTransition && !opts.noVT) {
     const root = document.documentElement;
     root.dataset.nav = dir;
@@ -504,19 +555,106 @@ function navigate(v, dir, opts = {}) {
   sc.addEventListener('touchend', end); sc.addEventListener('touchcancel', end);
 })();
 // 触覚フィードバック。Android は vibrate、iOS 18 以降の Safari はスイッチ型チェックボックスの切り替えで軽く震える
-function haptic() {
-  try { if (navigator.vibrate) { navigator.vibrate(10); return; } } catch (e) {}
-  try {
-    const l = document.createElement('label'), i = document.createElement('input');
-    i.type = 'checkbox'; i.setAttribute('switch', ''); i.tabIndex = -1;
-    l.setAttribute('aria-hidden', 'true'); l.style.cssText = 'position:fixed;left:-200px;top:0;opacity:0;pointer-events:none';
-    l.appendChild(i); document.body.appendChild(l); l.click(); l.remove();
-  } catch (e) {}
+// 押した感触: 指が触れた瞬間に縮め、離すと少し膨らんで戻す。速いタップでも最低 100ms は見せる
+const PRESS_SEL = '.sw-btn, .newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .navbtn, .lrow, .btn, .row-main, .check';
+const BOUNCE_SEL = '.navbtn, .addlist, .seg button, .newbtn, .send, .linkbtn, .tile, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .wd button, .colors button, .pv-ask button';
+(() => {
+  let cur = null, t0 = 0, sx = 0, sy = 0;
+  const release = (bounce) => {
+    if (!cur) return; const el = cur; cur = null;
+    setTimeout(() => {
+      el.classList.remove('is-pressed');
+      if (bounce && el.matches(BOUNCE_SEL) && !el.disabled && !reduceMotion()) { el.classList.remove('released'); el.offsetWidth; el.classList.add('released'); setTimeout(() => el.classList.remove('released'), 450); }
+    }, Math.max(0, 100 - (performance.now() - t0)));
+  };
+  document.addEventListener('pointerdown', e => {
+    const el = e.target.closest(PRESS_SEL); if (!el || el.disabled) return;
+    cur = el; t0 = performance.now(); sx = e.clientX; sy = e.clientY; el.classList.add('is-pressed');
+  }, { passive: true });
+  document.addEventListener('pointermove', e => { if (cur && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { cur.classList.remove('is-pressed'); cur = null; } }, { passive: true });
+  document.addEventListener('pointerup', () => release(true), { passive: true });
+  document.addEventListener('pointercancel', () => release(false), { passive: true });
+})();
+// 行のスワイプ（右: 完了・左: 1時間後/フラグ/削除）。縦のスクロールと区別し、左端は「戻る」用に空けておく
+let swOpen = null, swClickBlock = 0;
+function closeSwipe(anim = true) {
+  if (!swOpen) return; const { wrap, row } = swOpen; swOpen = null;
+  row.classList.toggle('settle', anim); row.style.transform = '';
+  setTimeout(() => { row.classList.remove('settle'); if (!swOpen || swOpen.wrap !== wrap) delete wrap.dataset.dir; }, 500);
+}
+(() => {
+  const sc = $('#scroll'); let g = null;
+  sc.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const wrap = e.target.closest('.swipe'); const row = wrap && wrap.querySelector(':scope > .row');
+    if (swOpen && (!wrap || swOpen.wrap !== wrap || !e.target.closest('.sw-btn'))) { if (!e.target.closest('.sw-btn')) { closeSwipe(); swClickBlock = performance.now(); } }
+    if (!row || e.target.closest('.sw-btn') || e.clientX - sc.getBoundingClientRect().left < 28) return;
+    g = { wrap, row, x: e.clientX, y: e.clientY, dx: 0, on: false, base: 0, w: wrap.offsetWidth, rw: wrap.querySelector('.sw-r').offsetWidth || 216, t: performance.now() };
+  });
+  sc.addEventListener('pointermove', e => {
+    if (!g) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { g = null; return; }
+      if (Math.abs(dx) < 12) return;
+      g.on = true; document.querySelectorAll('.is-pressed').forEach(x => x.classList.remove('is-pressed'));
+    }
+    let x = dx;
+    if (x < -g.rw) x = -g.rw + (x + g.rw) / 3;             // 左は操作ボタンの幅を超えると重くなる
+    if (x > g.w * .5) x = g.w * .5 + (x - g.w * .5) / 3;      // 右は半分を超えると重くなる
+    g.dx = x;
+    g.wrap.dataset.dir = x > 0 ? 'r' : 'l';
+    g.wrap.classList.toggle('armed', x > Math.min(110, g.w * .3));
+    g.row.classList.remove('settle'); g.row.style.transform = `translateX(${x}px)`;
+  });
+  const end = () => {
+    if (!g) return; const s = g; g = null; if (!s.on) return;
+    swClickBlock = performance.now();
+    const v = s.dx / Math.max(1, performance.now() - s.t);
+    if (s.wrap.classList.contains('armed')) {
+      s.wrap.classList.remove('armed');
+      s.row.classList.add('settle'); s.row.style.transform = '';
+      setTimeout(() => { delete s.wrap.dataset.dir; s.row.querySelector('.check')?.click(); }, 180);
+    } else if (s.dx < -s.rw * .4 || v < -.5) {
+      s.row.classList.add('settle'); s.row.style.transform = `translateX(${-s.rw}px)`;
+      swOpen = { wrap: s.wrap, row: s.row };
+    } else { swOpen = { wrap: s.wrap, row: s.row }; closeSwipe(); }
+  };
+  sc.addEventListener('pointerup', end); sc.addEventListener('pointercancel', () => { if (g && g.on) end(); else g = null; });
+  // スワイプ直後のクリック（詳細が開くなど）は無視する
+  sc.addEventListener('click', e => { if (performance.now() - swClickBlock < 350 && !e.target.closest('.sw-btn')) { e.stopPropagation(); e.preventDefault(); } }, true);
+  sc.addEventListener('click', e => {
+    const b = e.target.closest('.sw-btn'); if (!b) return;
+    const wrap = b.closest('.swipe'); const r = S.reminders.find(x => x.id === wrap.dataset.sw); if (!r) return;
+    const a = b.dataset.swa;
+    if (a === 'flag') { r.flagged = !r.flagged; save(); swOpen = null; render(); toast(r.flagged ? `「${esc(r.title)}」にフラグを付けました` : 'フラグを外しました'); }
+    else if (a === 'later') { const msg = snooze(r, 60); swOpen = null; render(); toast(esc(msg)); }
+    else if (a === 'del') {
+      const idx = S.reminders.indexOf(r); swOpen = null;
+      const h = wrap.offsetHeight;
+      const doDel = () => { S.reminders.splice(S.reminders.indexOf(r), 1); save(); render(); deleted = { r, idx }; toast(`「${esc(r.title)}」を削除しました<button class="undo" data-restore="1">取り消す</button>`, 5000); };
+      if (reduceMotion()) return doDel();
+      wrap.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 300, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+      setTimeout(doDel, 300);
+    }
+  });
+})();
+let deleted = null;
+// 一覧の行を上から順に並べる
+function staggerIn(root) {
+  if (reduceMotion()) return;
+  const els = [...root.querySelectorAll('.large, .day-h, .row, .foot-note, .empty, .grid, .sec-h, .group, .addlist')].slice(0, 16);
+  els.forEach((el, i) => { el.style.setProperty('--i', i); el.parentElement.classList.add('stagger'); });
+  setTimeout(() => { root.querySelectorAll('.stagger').forEach(x => x.classList.remove('stagger')); }, 1100);
 }
 // 登録した行を一瞬光らせて、どこに入ったか分かるようにする
 function celebrate(id) {
-  haptic();
-  requestAnimationFrame(() => { const el = document.querySelector(`.row[data-id="${id}"]`); if (el) { el.classList.add('flash'); el.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); } });
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`.row[data-id="${id}"]`); if (!el) return;
+    el.classList.add('flash');
+    if (!reduceMotion()) el.animate([{ opacity: 0, transform: 'translateY(-12px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 500, easing: 'cubic-bezier(.34,1.45,.64,1)' });
+    el.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+  });
 }
 function renderHome() {
   const keys = ['today', 'scheduled', 'all', 'flagged', 'repeat', 'completed'];
@@ -575,13 +713,26 @@ function rowHtml(r) {
   if (r.url) subs.push(`<a class="rlink" href="${esc(r.url)}" target="_blank" rel="noopener">${I.link}${esc(hostOf(r.url))}</a>`);
   if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
   const pr = r.priority ? `<span class="prio">${'!'.repeat(r.priority)}</span>` : '';
-  return `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
+  return swipeWrap(r, `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
     <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '完了にする'}"></button>
     <button class="row-main" data-open="${r.id}"><div class="row-title">${pr}${esc(r.title)}</div>
     ${subs.length ? `<div class="row-sub">${subs.join('')}</div>` : ''}${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
-    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`;
+    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`);
 }
 
+// スワイプで出す操作。ボタンでも同じことができる（詳細画面）ので、スワイプは近道
+const SWI = {
+  done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
+  later: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h2v18H5zM8 4h10l-2.5 4L18 12H8z"/></svg>',
+  del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+};
+function swipeWrap(r, rowHtml) {
+  const btns = [!r.done && !isGroup(r) ? ['later', '1時間後', 'indigo'] : null, ['flag', r.flagged ? 'フラグ解除' : 'フラグ', 'orange'], ['del', '削除', 'red']].filter(Boolean);
+  return `<div class="swipe" data-sw="${r.id}"><div class="sw-l" aria-hidden="true">${r.done ? SWI.undo + '未完了に戻す' : SWI.done + '完了'}</div>
+    <div class="sw-r">${btns.map(([a, l, c]) => `<button class="sw-btn" data-swa="${a}" style="--c:var(--${c})" tabindex="-1">${SWI[a]}${l}</button>`).join('')}</div>${rowHtml}</div>`;
+}
 function groupRowHtml(r) {
   const now = new Date();
   const ts = stepTimes(r), nx = nextStep(r);
@@ -595,11 +746,11 @@ function groupRowHtml(r) {
   if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
   const MAX = 6;
   const chips = r.steps.slice(0, MAX).map((st, i) => `<span class="gs ${st.done ? 'done' : nx && nx.i === i ? 'next' : ''}">${esc(hm(ts[i]))} ${esc(st.title)}</span>`).join('') + (r.steps.length > MAX ? `<span class="gs">ほか${r.steps.length - MAX}件</span>` : '');
-  return `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
+  return swipeWrap(r, `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
     <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '次の項目を完了にする'}"></button>
     <button class="row-main" data-open="${r.id}"><div class="row-title">${esc(r.title)}</div>
     <div class="row-sub">${subs.join('')}</div><div class="gsteps">${chips}</div>${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
-    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`;
+    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`);
 }
 function completeStep(r, i) {
   const st = r.steps[i]; if (!st) return '';
@@ -639,11 +790,19 @@ document.addEventListener('click', e => {
   else if (t.dataset.check) {
     const r = S.reminders.find(x => x.id === t.dataset.check); if (!r) return;
     if (r.done) { r.done = false; r.doneAt = null; if (isGroup(r)) r.steps.forEach(x => { x.done = false; x.lastNotified = null; }); save(); render(); return; }
-    t.classList.add('on'); haptic();
-    // 完了で一覧から消えるものは、チェックの後に右へ抜けていく
-    if (!isGroup(r) && !r.rule && !reduceMotion()) { const row = t.closest('.row'); setTimeout(() => row && row.classList.add('leaving'), 100); }
-    if (isGroup(r)) { setTimeout(() => { const nx = nextStep(r); if (nx) toast(esc(completeStep(r, nx.i))); render(); }, 380); return; }
-    setTimeout(() => { const msg = completeRem(r); toast(`「${esc(r.title)}」${msg}`); render(); }, 380);
+    t.classList.add('on');
+    // 完了で一覧から消えるものは、チェックが描かれた後に右へ抜け、行の高さが縮んで詰まる
+    const row = t.closest('.swipe') || t.closest('.row');
+    const leaves = !isGroup(r) && !r.rule && !reduceMotion() && row;
+    if (leaves) setTimeout(() => {
+      row.classList.add('leaving'); row.querySelector('.row')?.classList.add('leaving');
+      const h = row.offsetHeight;
+      row.animate([{ opacity: 1, transform: 'none', height: h + 'px' }, { opacity: 0, transform: 'translateX(40px)', height: h + 'px', offset: .5 }, { opacity: 0, transform: 'translateX(40px)', height: '0px', paddingTop: '0px', paddingBottom: '0px' }],
+        { duration: 420, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    }, 420);
+    const wait = leaves ? 860 : 520;
+    if (isGroup(r)) { setTimeout(() => { const nx = nextStep(r); if (nx) toast(esc(completeStep(r, nx.i))); render(); }, wait); return; }
+    setTimeout(() => { const msg = completeRem(r); toast(`「${esc(r.title)}」${msg}`); render(); }, wait);
   }
   else if (t.dataset.open) { const r = S.reminders.find(x => x.id === t.dataset.open); if (r && isGroup(r)) openGroupEditor(r.id); else openDetail(t.dataset.open); }
   else if (t.id === 'backBtn') navigate({ name: 'home' }, 'back');
@@ -702,6 +861,7 @@ $('#quick').addEventListener('paste', e => {
 $('#qform').addEventListener('submit', e => {
   e.preventDefault();
   const v = $('#quick').value.trim(); if (!v) return;
+  if (!reduceMotion()) { const sb = $('#sendBtn'); sb.classList.remove('launch'); sb.offsetWidth; sb.classList.add('launch'); setTimeout(() => sb.classList.remove('launch'), 520); }
   const listId = view.list || 'inbox';
   const extra = view.smart === 'flagged' ? { flagged: true } : {};
   const fieldUrl = normUrl($('#quickUrl').value);
@@ -857,6 +1017,7 @@ function openWizardFrom(w) {
 // ---- トースト ----
 let toastTimer;
 $('#toast').addEventListener('click', e => {
+  if (e.target.closest('[data-restore]') && deleted) { S.reminders.splice(Math.min(deleted.idx, S.reminders.length), 0, deleted.r); const id = deleted.r.id; deleted = null; save(); render(); celebrate(id); toast('元に戻しました'); return; }
   const b = e.target.closest('[data-undo]'); if (!b) return;
   S.reminders = S.reminders.filter(x => x.id !== b.dataset.undo); save(); render(); toast('取り消しました');
 });
@@ -875,6 +1036,7 @@ function openSheet(html, onMount) {
   const w = $('#sheetWrap'), s = $('#sheet');
   if (sheetCloseT) { clearTimeout(sheetCloseT); sheetCloseT = null; w.classList.remove('closing'); s.classList.remove('tall'); s.style.transform = ''; s.style.animation = 'none'; s.offsetHeight; s.style.animation = ''; }
   s.innerHTML = html; w.hidden = false;
+  document.documentElement.classList.add('sheet-open');
   w.onclick = e => { if (e.target === w) closeSheet(); };
   onMount && onMount(s);
 }
@@ -882,6 +1044,7 @@ function closeSheet() {
   const w = $('#sheetWrap'), s = $('#sheet');
   const done = () => { sheetCloseT = null; w.hidden = true; w.classList.remove('closing'); s.innerHTML = ''; s.classList.remove('tall', 'dragging', 'settle'); s.style.transform = ''; };
   if (w.hidden || sheetCloseT) return;
+  document.documentElement.classList.remove('sheet-open');
   if (reduceMotion()) return done();
   s.classList.remove('dragging', 'settle');
   w.classList.add('closing');
@@ -1415,6 +1578,11 @@ function openHelp() {
   ];
   const html = sheetHead('書き方ガイド', '閉じる', '') + `<div class="sheet-b gut">
     <div class="fgroup-f" style="margin-top:0">LINE で送る感覚で、話しかけるように書いてください。語順は自由で、「えーと」「(笑)」「お願い」などは無視します。日時が読み取れないときは候補を出します。「」で囲んだ部分はそのまま通知の文になります。URL を書くか左のリンクボタンから付けると、通知をタップしたときに開きます。</div>
+    <div><div class="fgroup-h">指での操作</div><div class="fgroup"><div class="guide">
+      <div>行を<b>右へスワイプ</b> → 完了（完了済みは未完了に戻す）</div>
+      <div>行を<b>左へスワイプ</b> → 1時間後・フラグ・削除</div>
+      <div>リストの中で<b>左端から右へスワイプ</b> → 前の画面に戻る</div>
+      <div>シートの<b>上の部分を下へ引く</b> → 閉じる</div></div></div></div>
     ${G.map(([h, xs]) => `<div><div class="fgroup-h">${h}</div><div class="fgroup"><div class="guide">${xs.map(x => `<div><code data-try="${esc(x)}">${esc(x)}</code> <span class="val" style="font-size:13px">→ ${esc((() => { const gp = parseGroup(x); if (gp && gp.every) return `グループ ${gp.items.length}件・${gp.every.value}${UNIT_JA[gp.every.unit]}おき`; const p = parseInput(x); return p.rule ? describeRule(p.rule) : p.due ? fmtDue(p.due) : '日時なし'; })())}${(() => { const p = parseInput(x); return p.nag ? '・確実に' : ''; })()}</span></div>`).join('')}</div></div></div>`).join('')}
     <div><div class="fgroup-h">リマインくん・純正リマインダーとの比較</div><div class="fgroup tbl-wrap"><table class="cmp"><thead><tr><th>機能</th><th>リマインくん</th><th>純正</th><th>りまいん</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table></div>
     <div class="fgroup-f">「N日おき」は「1日おき＝隔日」と同じ数え方で、N+1日ごとになります。迷ったら「N日ごと」と書いてください。祝日は内閣府の規則から計算しています（特例で移動した年は未対応）。</div></div>
