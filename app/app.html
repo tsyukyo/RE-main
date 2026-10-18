@@ -1,0 +1,1326 @@
+<title>りまいん</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="りまいん">
+<style>
+/* Layout: iOS「リマインダー」準拠の1カラムアプリ。下部にリマインくん式の自然文入力バーを常設 */
+:root {
+  --bg: #f2f2f7; --card: #ffffff; --fg: #000000; --fg2: #8a8a8e; --fg3: #c4c4c7; --sep: rgba(60,60,67,.18);
+  --fill: rgba(118,118,128,.12); --blue: #007aff; --red: #ff3b30; --orange: #ff9500; --green: #34c759;
+  --purple: #af52de; --gray: #8e8e93; --teal: #30b0c7; --indigo: #5856d6; --bar: rgba(249,249,249,.94);
+  --shadow: 0 10px 30px rgba(0,0,0,.18);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #000000; --card: #1c1c1e; --fg: #ffffff; --fg2: #98989f; --fg3: #48484a; --sep: rgba(84,84,88,.6);
+  --fill: rgba(118,118,128,.24); --blue: #0a84ff; --red: #ff453a; --orange: #ff9f0a; --green: #30d158;
+  --purple: #bf5af2; --gray: #98989d; --teal: #40c8e0; --indigo: #5e5ce6; --bar: rgba(22,22,24,.94);
+  --shadow: 0 10px 30px rgba(0,0,0,.6); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #000000; --card: #1c1c1e; --fg: #ffffff; --fg2: #98989f; --fg3: #48484a; --sep: rgba(84,84,88,.6);
+  --fill: rgba(118,118,128,.24); --blue: #0a84ff; --red: #ff453a; --orange: #ff9f0a; --green: #30d158;
+  --purple: #bf5af2; --gray: #98989d; --teal: #40c8e0; --indigo: #5e5ce6; --bar: rgba(22,22,24,.94);
+  --shadow: 0 10px 30px rgba(0,0,0,.6); color-scheme: dark; }
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 17px; -webkit-tap-highlight-color: transparent; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+.app { max-width: 520px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; position: relative; background: var(--bg); }
+.gut { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* ナビゲーションバー */
+.nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 44px; padding-block: 4px; }
+.nav .left { justify-self: start; } .nav .right { justify-self: end; display: flex; gap: 16px; }
+.navbtn { color: var(--blue); display: inline-flex; align-items: center; gap: 2px; font-size: 17px; min-height: 36px; }
+.navbtn svg { width: 22px; height: 22px; }
+.nav-title { font-weight: 600; opacity: 0; transition: opacity .2s; }
+.nav-title.show { opacity: 1; }
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-block: 0 24px; }
+.large { font-size: 34px; font-weight: 700; letter-spacing: .01em; margin: 2px 0 12px; text-wrap: balance; }
+
+/* 検索 */
+.search { display: flex; align-items: center; gap: 6px; background: var(--fill); border-radius: 10px; padding: 0 8px; height: 36px; margin-bottom: 18px; }
+.search svg { width: 16px; height: 16px; color: var(--fg2); flex: none; }
+.search input { border: 0; background: transparent; outline: none; flex: 1; min-width: 0; font-size: 17px; }
+.search input::placeholder { color: var(--fg2); }
+
+/* スマートリスト */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 26px; }
+.tile { background: var(--card); border-radius: 12px; padding: 10px 12px 9px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; text-align: left; min-height: 82px; }
+.tile .ic { width: 32px; height: 32px; border-radius: 50%; background: var(--c); display: grid; place-items: center; color: #fff; }
+.tile .ic svg { width: 18px; height: 18px; }
+.tile .num { font-size: 28px; font-weight: 700; line-height: 32px; font-variant-numeric: tabular-nums; }
+.tile .lbl { grid-column: 1 / -1; align-self: end; font-weight: 600; color: var(--fg2); font-size: 15px; margin-top: 8px; }
+.sec-h { font-size: 22px; font-weight: 700; margin: 0 0 8px; }
+.group { background: var(--card); border-radius: 12px; overflow: hidden; }
+.lrow { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 14px; text-align: left; min-height: 52px; }
+.lrow { position: relative; }
+.lrow + .lrow::before { content: ""; position: absolute; top: 0; left: 56px; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
+.lrow .dot { width: 30px; height: 30px; border-radius: 50%; background: var(--c); display: grid; place-items: center; color: #fff; flex: none; }
+.lrow .dot svg { width: 17px; height: 17px; }
+.lrow .name { flex: 1; min-width: 0; }
+.lrow .cnt { color: var(--fg2); font-variant-numeric: tabular-nums; }
+.lrow .chev { width: 8px; color: var(--fg3); }
+.addlist { color: var(--blue); margin-top: 14px; font-size: 17px; }
+.hint { color: var(--fg2); font-size: 13px; line-height: 1.5; margin: 18px 4px 0; }
+
+/* リマインダー行 */
+.items { display: flex; flex-direction: column; }
+.day-h { font-size: 20px; font-weight: 700; margin: 22px 0 4px; display: flex; align-items: baseline; gap: 8px; }
+.day-h small { font-size: 13px; color: var(--red); font-weight: 600; }
+.row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; position: relative; }
+.row::after { content: ""; position: absolute; left: 36px; right: 0; bottom: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
+.check { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--fg3); flex: none; margin-top: 1px; display: grid; place-items: center; transition: background .15s, border-color .15s; }
+.check::after { content: ""; width: 12px; height: 12px; border-radius: 50%; background: transparent; transition: background .15s; }
+.row.done .check, .check.on { border-color: var(--c); }
+.row.done .check::after, .check.on::after { background: var(--c); }
+.row-main { flex: 1; min-width: 0; text-align: left; }
+.row-title { line-height: 1.3; word-break: break-word; }
+.row.done .row-title { color: var(--fg2); }
+.prio { color: var(--c); font-weight: 700; margin-right: 3px; }
+.row-sub { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 15px; color: var(--fg2); margin-top: 3px; align-items: center; }
+.row-sub .over { color: var(--red); }
+.row-sub .rep { display: inline-flex; align-items: center; gap: 3px; }
+.row-sub svg { width: 13px; height: 13px; }
+.badge { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
+.badge.snz { background: color-mix(in srgb, var(--indigo) 16%, transparent); color: var(--indigo); }
+.row-notes { font-size: 15px; color: var(--fg2); margin-top: 2px; }
+.flag { color: var(--orange); width: 16px; flex: none; margin-top: 3px; }
+.empty { text-align: center; color: var(--fg2); padding: 48px 12px; line-height: 1.6; }
+.foot-note { color: var(--fg2); font-size: 13px; margin-top: 18px; }
+
+/* 入力バー（リマインくん式） */
+.composer { background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-top: .5px solid var(--sep); padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
+.qform { display: flex; gap: 8px; align-items: center; }
+.qform input { flex: 1; min-width: 0; height: 40px; border-radius: 20px; border: .5px solid var(--sep); background: var(--card); padding: 0 16px; font-size: 16px; outline: none; }
+.qform input:focus { border-color: var(--blue); }
+.send { width: 40px; height: 40px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; flex: none; }
+.send:disabled { background: var(--fg3); }
+.send svg { width: 20px; height: 20px; }
+.preview { background: var(--card); border-radius: 14px; padding: 10px 12px; display: grid; gap: 6px; box-shadow: 0 1px 0 var(--sep); }
+.pv-title { font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 13px; padding: 3px 9px; border-radius: 999px; background: var(--fill); color: var(--fg); display: inline-flex; gap: 4px; align-items: center; }
+.chip.k { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue); }
+.chip.n { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
+.chip.w { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.pv-note { font-size: 12px; color: var(--fg2); }
+.pv-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--fg2); }
+.pv-ask button { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; }
+.linkbtn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); flex: none; }
+.linkbtn[aria-pressed="true"], .linkbtn.has { color: var(--blue); }
+.linkbtn svg { width: 22px; height: 22px; }
+.urlrow { display: flex; gap: 8px; align-items: center; }
+.urlrow input { flex: 1; min-width: 0; height: 36px; border-radius: 10px; border: .5px solid var(--sep); background: var(--card); padding: 0 12px; font-size: 15px; outline: none; }
+.urlrow input:focus { border-color: var(--blue); }
+.urlrow .lab { font-size: 13px; color: var(--fg2); white-space: nowrap; }
+.chip.u { background: color-mix(in srgb, var(--teal) 16%, transparent); color: var(--teal); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rlink { display: inline-flex; align-items: center; gap: 3px; color: var(--blue); text-decoration: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rlink svg { flex: none; }
+.bn-main { display: block; color: inherit; text-decoration: none; }
+.bn-url { font-size: 13px; color: var(--blue); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet.tall { height: calc(100% - 40px - env(safe-area-inset-top, 0px)); }
+.chat { flex: 1; overflow-y: auto; padding-block: 16px; display: flex; flex-direction: column; gap: 10px; }
+.bub { display: flex; gap: 8px; align-items: flex-end; max-width: 86%; }
+.bub .av { width: 28px; height: 28px; border-radius: 50%; background: var(--green); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; flex: none; }
+.bub .tx { padding: 9px 13px; border-radius: 18px; line-height: 1.45; font-size: 16px; word-break: break-word; }
+.bub.bot .tx { background: var(--card); border-bottom-left-radius: 6px; }
+.bub.me { align-self: flex-end; }
+.bub.me .tx { background: var(--blue); color: #fff; border-bottom-right-radius: 6px; }
+.bub .sub { display: block; font-size: 13px; color: var(--fg2); margin-top: 3px; }
+.bub.pop { animation: pop .22s ease-out; }
+@keyframes pop { from { transform: translateY(6px); opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .bub.pop { animation: none; } }
+.chat-in { border-top: .5px solid var(--sep); background: var(--bar); padding-block: 8px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
+.chat-in .chips button { font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); color: var(--blue); font-weight: 600; }
+.chat-in .chips button.skip { color: var(--fg); }
+.chat-in form { display: flex; gap: 8px; }
+.chat-in input { flex: 1; min-width: 0; height: 40px; border-radius: 20px; border: .5px solid var(--sep); background: var(--card); padding: 0 16px; font-size: 16px; outline: none; }
+.chat-in input:focus { border-color: var(--blue); }
+.chat-in .next { height: 40px; padding: 0 16px; border-radius: 20px; background: var(--blue); color: #fff; font-weight: 600; flex: none; }
+.steps { display: flex; gap: 4px; justify-content: center; padding-top: 2px; }
+.steps i { width: 18px; height: 4px; border-radius: 2px; background: var(--fill); }
+.steps i.on { background: var(--blue); }
+.newbtn { display: inline-flex; align-items: center; gap: 6px; color: var(--blue); font-weight: 600; font-size: 17px; min-height: 36px; }
+.newbtn .plus { width: 24px; height: 24px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; }
+.newbtn .plus svg { width: 14px; height: 14px; }
+.cbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cbar .mode { font-size: 12px; color: var(--fg2); }
+.confirm-note { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--fg2); line-height: 1.5; margin: 0 4px; }
+.confirm-note b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; font-size: 11px; display: grid; place-items: center; }
+.gsteps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.gs { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--fill); color: var(--fg); font-variant-numeric: tabular-nums; }
+.gs.done { text-decoration: line-through; color: var(--fg2); }
+.gs.next { background: color-mix(in srgb, var(--blue) 15%, transparent); color: var(--blue); font-weight: 600; }
+.gbadge { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--teal) 16%, transparent); color: var(--teal); }
+.gstep { padding: 8px 12px 8px 16px; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 30px; gap: 4px 8px; align-items: center; position: relative; }
+.gstep + .gstep::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
+.gstep .no { font-size: 13px; color: var(--fg2); font-variant-numeric: tabular-nums; }
+.gstep input[type=text] { width: 100%; min-width: 0; border: 0; background: transparent; outline: none; padding: 8px 0; font-size: 17px; }
+.gstep .tm { font-size: 14px; color: var(--blue); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gstep .rm { width: 28px; height: 28px; border-radius: 50%; color: var(--red); display: grid; place-items: center; font-size: 20px; line-height: 1; }
+.gstep .sub { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; color: var(--fg2); }
+.gstep .sub input[type=number] { width: 64px; text-align: right; border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 15px; }
+.gstep .sub select { border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 15px; }
+.gstep .sub input[type=url] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 14px; color: var(--blue); }
+.gstep.done input[type=text] { text-decoration: line-through; color: var(--fg2); }
+.gsum { font-size: 13px; color: var(--fg2); margin: 6px 16px 0; font-variant-numeric: tabular-nums; }
+.inl { display: flex; gap: 8px; align-items: center; padding: 8px 16px; }
+.inl input[type=text] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 8px 10px; font-size: 15px; }
+.inl button { color: var(--blue); font-weight: 600; white-space: nowrap; }
+.toast .undo { color: var(--blue); font-weight: 700; margin-left: 10px; filter: brightness(1.4); }
+.f input[type=url] { width: 100%; border: 0; background: transparent; outline: none; padding: 12px 0; font-size: 16px; color: var(--blue); }
+.examples { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.examples::-webkit-scrollbar { display: none; }
+.ex { white-space: nowrap; font-size: 13px; padding: 6px 11px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); }
+
+/* シート */
+.sheet-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--bg); width: 100%; max-width: 520px; max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); border-radius: 14px 14px 0 0; display: flex; flex-direction: column; animation: up .28s cubic-bezier(.2,.8,.2,1); }
+@keyframes up { from { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+.sheet-h { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 52px; border-bottom: .5px solid var(--sep); }
+.sheet-h .t { font-weight: 600; }
+.sheet-h .r { justify-self: end; font-weight: 600; }
+.sheet-b { overflow-y: auto; padding-block: 16px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 22px; }
+.fgroup { background: var(--card); border-radius: 12px; overflow: hidden; }
+.fgroup-h { font-size: 13px; color: var(--fg2); margin: 0 16px 6px; letter-spacing: .02em; }
+.fgroup-f { font-size: 13px; color: var(--fg2); margin: 6px 16px 0; line-height: 1.5; }
+.f { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 46px; position: relative; }
+.f + .f::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
+.f > label, .f > .lab { flex: 1; min-width: 0; }
+.f input[type=text], .f textarea { width: 100%; border: 0; background: transparent; outline: none; padding: 12px 0; font-size: 17px; }
+.f textarea { resize: none; min-height: 64px; font-size: 15px; }
+.f input[type=date], .f input[type=time], .f input[type=datetime-local], .f input[type=number], .f select {
+  border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 16px; color: var(--fg); max-width: 60%; }
+.f input[type=number] { width: 70px; text-align: right; }
+.f .val { color: var(--fg2); }
+.wd { display: flex; gap: 6px; padding: 10px 16px; flex-wrap: wrap; }
+.wd button { width: 36px; height: 36px; border-radius: 50%; background: var(--fill); font-size: 15px; }
+.wd button[aria-pressed="true"] { background: var(--blue); color: #fff; }
+.switch { appearance: none; -webkit-appearance: none; width: 51px; height: 31px; border-radius: 16px; background: var(--fill); position: relative; transition: background .2s; flex: none; cursor: pointer; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.25); transition: transform .2s; }
+.switch:checked { background: var(--green); }
+.switch:checked::after { transform: translateX(20px); }
+.btn { width: 100%; min-height: 46px; padding: 0 16px; text-align: left; color: var(--blue); }
+.btn.danger { color: var(--red); }
+.btn.center { text-align: center; }
+.upc { padding: 6px 16px 12px; display: flex; flex-direction: column; gap: 4px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.upc .hol { color: var(--red); font-size: 12px; margin-left: 6px; }
+.colors { display: flex; gap: 10px; padding: 12px 16px; flex-wrap: wrap; }
+.colors button { width: 32px; height: 32px; border-radius: 50%; background: var(--c); }
+.colors button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--fg3); }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; width: 100%; min-height: 160px; border: 0; background: transparent; padding: 12px 16px; resize: vertical; color: var(--fg); outline: none; }
+.msg { font-size: 13px; padding: 0 16px 12px; }
+.msg.ok { color: var(--green); } .msg.err { color: var(--red); }
+.seg { display: flex; background: var(--fill); border-radius: 9px; padding: 2px; margin: 10px 16px; }
+.seg button { flex: 1; padding: 6px 0; border-radius: 7px; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.15); font-weight: 600; }
+.tbl-wrap { overflow-x: auto; }
+table.cmp { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 420px; }
+table.cmp th, table.cmp td { padding: 8px 10px; border-bottom: .5px solid var(--sep); text-align: left; vertical-align: top; }
+table.cmp th { color: var(--fg2); font-weight: 600; }
+.yes { color: var(--green); font-weight: 700; } .no { color: var(--fg3); } .part { color: var(--orange); }
+.guide { padding: 6px 16px 12px; display: grid; gap: 8px; font-size: 15px; }
+.guide code { font-family: inherit; background: var(--fill); padding: 2px 7px; border-radius: 6px; cursor: pointer; }
+.guide .g-h { color: var(--fg2); font-size: 13px; margin-top: 6px; }
+
+/* 通知バナー・トースト */
+.banner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); width: calc(100% - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 500px; z-index: 60;
+  background: color-mix(in srgb, var(--card) 90%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; animation: drop .3s ease-out; }
+@keyframes drop { from { transform: translate(-50%, -120%); } }
+.bn-top { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg2); }
+.bn-top .appic { width: 20px; height: 20px; border-radius: 5px; background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.bn-top .when { margin-left: auto; }
+.bn-title { font-weight: 600; }
+.bn-sub { font-size: 15px; color: var(--fg2); }
+.bn-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.bn-acts button { flex: 1; min-width: 70px; background: var(--fill); border-radius: 10px; padding: 8px 6px; font-size: 14px; font-weight: 600; }
+.bn-acts button.pri, .bn-acts a.pri { background: var(--blue); color: #fff; }
+.bn-acts a.btnlike { flex: 1; min-width: 70px; border-radius: 10px; padding: 8px 6px; font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(130px + env(safe-area-inset-bottom, 0px)); z-index: 55; width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 440px; box-sizing: border-box;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); }
+.bot { display: flex; gap: 8px; align-items: flex-start; }
+.bot b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; font-size: 11px; display: grid; place-items: center; margin-top: 1px; }
+</style>
+
+<div class="app" id="app">
+  <header class="nav gut" id="nav">
+    <div class="left"><button class="navbtn" id="backBtn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>リスト</button></div>
+    <div class="nav-title" id="navTitle"></div>
+    <div class="right">
+      <button class="navbtn" id="helpBtn" aria-label="書き方ガイド"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8M12 17h.01" stroke-linecap="round"/></svg></button>
+      <button class="navbtn" id="dataBtn" aria-label="ファイルと設定"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 10v6M9.5 13.5 12 16l2.5-2.5" stroke-linecap="round"/></svg></button>
+    </div>
+  </header>
+  <main class="scroll gut" id="scroll"></main>
+  <div class="composer gut">
+    <div class="cbar"><button type="button" class="newbtn" id="newBtn"><span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>新規リマインダー</button><span class="mode" id="modeLbl"></span><button type="button" class="newbtn" id="newGroupBtn" style="font-weight:500;font-size:15px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke-width="3"/></svg>グループ</button></div>
+    <div class="preview" id="preview" hidden></div>
+    <div class="examples" id="examples"></div>
+    <div class="urlrow" id="urlRow" hidden><span class="lab">通知から開く</span><input id="quickUrl" type="url" inputmode="url" placeholder="https://…（任意）" aria-label="通知をタップしたときに開くURL"></div>
+    <form class="qform" id="qform" autocomplete="off" novalidate>
+      <button type="button" class="linkbtn" id="linkBtn" aria-pressed="false" aria-label="URLを付ける"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg></button>
+      <input id="quick" type="text" enterkeyhint="send" placeholder="何をリマインドしますか？（例: 明日9時に資料送る）" aria-label="話し言葉でリマインダーを追加">
+      <button class="send" id="sendBtn" type="submit" aria-label="追加" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+    </form>
+  </div>
+</div>
+<div class="banner" id="banner" hidden role="alert"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+<div class="sheet-wrap" id="sheetWrap" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+
+<script>
+/*ENGINE*/
+</script>
+<script>
+// ===== UI =====
+const STORE_KEY = 'rimain.v1';
+const FORMAT = 'rimain.reminders';
+const FORMAT_VERSION = 1;
+const COLORS = ['blue', 'red', 'orange', 'green', 'teal', 'purple', 'indigo', 'gray'];
+const I = {
+  rep: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 21V4h1v.5C8 3 10 3.5 12 4.5s4 1.5 7 0v10c-3 1.5-5 1-7 0s-4-1.5-6 0V21z"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
+  today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/></svg>',
+  all: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18v6H3zM3 14h18v6H3z" opacity=".95"/></svg>',
+  done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.3" fill="currentColor"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1l6 6-6 6"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 17V11a6 6 0 1 1 12 0v6l1.5 2h-15z"/><path d="M10 21h4"/></svg>',
+  link: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>',
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const $ = s => document.querySelector(s);
+function normUrl(u) {
+  u = String(u || '').trim(); if (!u) return null;
+  if (/^www\./i.test(u)) u = 'https://' + u;
+  if (!/^[a-z]+:\/\//i.test(u) && /^[\w-]+(\.[\w-]+)+(\/|$)/.test(u)) u = 'https://' + u;
+  try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : null; } catch (e) { return null; }
+}
+const hostOf = u => { try { return new URL(u).host.replace(/^www\./, ''); } catch (e) { return u; } };
+
+// ---- 状態 ----
+let S = null;
+let view = { name: 'home' };
+let searchQ = '';
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) {} try { window.rimainOnSave && window.rimainOnSave(S); } catch (e) {} }
+function load() { try { const t = localStorage.getItem(STORE_KEY); if (t) { const d = JSON.parse(t); if (d && Array.isArray(d.reminders)) return d; } } catch (e) {} return null; }
+function makeReminder(text, listId, extra = {}) {
+  const now = new Date();
+  const p = parseInput(text, now);
+  return { id: uid(), title: p.title, notes: '', url: normUrl(p.url), list: listId, due: p.due ? fmtLocal(p.due) : null, rule: p.rule, nag: p.nag,
+    flagged: false, priority: 0, done: false, doneAt: null, count: 0, history: [], input: text, createdAt: fmtLocal(now), ...extra };
+}
+function sample() {
+  const lists = [
+    { id: 'inbox', name: 'リマインダー', color: 'blue' },
+    { id: 'home', name: '家のこと', color: 'orange' },
+    { id: 'work', name: '仕事', color: 'purple' },
+  ];
+  const ex = [
+    ['隔週火曜 7:30 燃えないゴミ', 'home', { notes: '第1・第3ではなく「隔週」で回る地区の想定（サンプル）' }],
+    ['偶数日 7時 ベランダの水やり', 'home', {}],
+    ['毎日8時と20時 薬を飲む 確実に', 'inbox', { flagged: true, notes: '完了するまで5分ごとに再通知（サンプル）' }],
+    ['隔日 21時 筋トレ', 'inbox', {}],
+    ['平日8時 出社準備 祝日除く', 'work', {}],
+    ['毎月第2火曜 10時 定例ミーティング https://example.com/meeting', 'work', { priority: 2, notes: '通知をタップすると URL を開きます（サンプル）' }],
+    ['18時半に明日の件を設定して', 'work', {}],
+    ['毎月末 20時 家計簿を締める', 'home', {}],
+    ['完了から1ヶ月後 歯ブラシ交換', 'home', {}],
+    ['奇数日の平日 12時 英単語', 'inbox', {}],
+    ['30分後 洗濯物を取り込む', 'home', {}],
+    ['明後日 15:30 歯医者', 'inbox', { priority: 1 }],
+  ];
+  const gs = new Date(); gs.setDate(gs.getDate() + 1); gs.setHours(9, 0, 0, 0);
+  const group = { id: uid(), kind: 'group', title: '地名チェック', notes: '時間差のグループ通知のサンプル（間隔は項目ごと）', list: 'work', due: fmtLocal(gs),
+    spacing: 'each', every: { value: 30, unit: 'minute' }, urlMode: 'same', url: 'https://example.com/area',
+    steps: [['千葉', 0], ['東京', 30], ['神奈川', 25], ['長野', 60]].map(([t, m]) => ({ id: uid(), title: t, url: null, after: { value: m, unit: 'minute' } })),
+    flagged: false, priority: 0, done: false, doneAt: null, history: [], createdAt: fmtLocal(new Date()) };
+  return { format: FORMAT, version: FORMAT_VERSION, lists, reminders: [...ex.map(([t, l, x]) => makeReminder(t, l, x)), group], sampleData: true };
+}
+const listById = id => S.lists.find(l => l.id === id) || S.lists[0];
+const colorOf = rem => `var(--${listById(rem.list).color})`;
+const isGroup = r => r.kind === 'group';
+// グループ: 1件目は開始日時、2件目以降は「ひとつ前の通知から」の間隔
+const stepAfter = (r, i) => (r.spacing === 'equal' ? r.every : r.steps[i].after) || { value: 0, unit: 'minute' };
+const stepTimes = r => groupTimes(r.due, r.steps.map((st, i) => ({ after: i ? stepAfter(r, i) : null })));
+const stepUrl = (r, st) => (r.urlMode === 'each' ? normUrl(st.url) : r.urlMode === 'same' ? r.url : null);
+function nextStep(r) {
+  const ts = stepTimes(r); let best = null;
+  r.steps.forEach((st, i) => { if (st.done) return; const t = st.snoozeUntil ? parseLocal(st.snoozeUntil) : ts[i]; if (t && (!best || t < best.t)) best = { i, t, st }; });
+  return best;
+}
+const dueOf = rem => isGroup(rem) ? (nextStep(rem) || {}).t || null : parseLocal(rem.snoozeUntil || rem.due);
+const hm = d => d ? `${d.getHours()}:${pad(d.getMinutes())}` : '';
+const UNIT_JA = { minute: '分', hour: '時間', day: '日' };
+const endOfToday = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; };
+
+const SMART = {
+  today: { name: '今日', color: 'blue', icon: I.today, filter: r => !r.done && dueOf(r) && dueOf(r) <= endOfToday() },
+  scheduled: { name: '日時設定あり', color: 'red', icon: I.cal, filter: r => !r.done && r.due, grouped: true },
+  all: { name: 'すべて', color: 'gray', icon: I.all, filter: r => !r.done },
+  flagged: { name: 'フラグ付き', color: 'orange', icon: I.flag, filter: r => !r.done && r.flagged },
+  repeat: { name: '繰り返し', color: 'teal', icon: I.rep, filter: r => !r.done && r.rule },
+  completed: { name: '完了済み', color: 'gray', icon: I.done, filter: r => r.done },
+};
+function sortRems(arr) {
+  return arr.slice().sort((a, b) => {
+    const da = dueOf(a), db = dueOf(b);
+    if (da && db) return da - db; if (da) return -1; if (db) return 1;
+    return (b.priority || 0) - (a.priority || 0);
+  });
+}
+
+// ---- 描画 ----
+function render() {
+  const sc = $('#scroll');
+  const back = $('#backBtn'), nt = $('#navTitle');
+  if (view.name === 'home') {
+    back.hidden = true; nt.textContent = ''; nt.classList.remove('show');
+    sc.innerHTML = renderHome();
+    const si = $('#searchIn'); si.value = searchQ;
+    si.addEventListener('input', e => { searchQ = e.target.value; renderSearchResults(); });
+    renderSearchResults();
+  } else {
+    back.hidden = false;
+    const meta = view.smart ? SMART[view.smart] : listById(view.list);
+    nt.textContent = meta.name;
+    sc.innerHTML = renderList();
+    sc.onscroll = () => nt.classList.toggle('show', sc.scrollTop > 40);
+  }
+}
+function renderHome() {
+  const keys = ['today', 'scheduled', 'all', 'flagged', 'repeat', 'completed'];
+  const tiles = keys.map(k => { const m = SMART[k];
+    return `<button class="tile" data-smart="${k}" style="--c:var(--${m.color})"><span class="ic">${m.icon}</span><span class="num">${S.reminders.filter(m.filter).length}</span><span class="lbl">${m.name}</span></button>`; }).join('');
+  const lists = S.lists.map(l => `<button class="lrow" data-list="${l.id}" style="--c:var(--${l.color})"><span class="dot">${I.list}</span><span class="name">${esc(l.name)}</span><span class="cnt">${S.reminders.filter(r => !r.done && r.list === l.id).length}</span>${I.chev}</button>`).join('');
+  return `<div class="search">${I.search}<input id="searchIn" type="search" placeholder="検索" aria-label="リマインダーを検索"></div>
+    <div id="homeBody"><div class="grid">${tiles}</div>
+    <h2 class="sec-h">マイリスト</h2><div class="group">${lists}</div>
+    <button class="addlist" id="addListBtn">リストを追加</button>
+    ${S.sampleData ? '<p class="hint">いま表示しているのはサンプルです。右上のフォルダから JSON ファイルを読み込むと、自分のデータに置き換えられます。</p>' : ''}</div>
+    <div id="searchBody" hidden></div>`;
+}
+function renderSearchResults() {
+  const hb = $('#homeBody'), sb = $('#searchBody');
+  if (!hb) return;
+  const q = searchQ.trim();
+  hb.hidden = !!q; sb.hidden = !q;
+  if (!q) return;
+  const res = sortRems(S.reminders.filter(r => (r.title + ' ' + (r.notes || '')).toLowerCase().includes(q.toLowerCase())));
+  sb.innerHTML = res.length ? `<div class="items">${res.map(rowHtml).join('')}</div>` : `<p class="empty">「${esc(q)}」に一致するリマインダーはありません</p>`;
+}
+function renderList() {
+  const now = new Date();
+  let rems, meta;
+  if (view.smart) { meta = SMART[view.smart]; rems = S.reminders.filter(meta.filter); }
+  else { meta = listById(view.list); rems = S.reminders.filter(r => !r.done && r.list === view.list); }
+  rems = view.smart === 'completed' ? rems.slice().sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt))) : sortRems(rems);
+  const color = `var(--${meta.color})`;
+  let body = '';
+  if (!rems.length) body = `<p class="empty">${view.smart === 'completed' ? '完了したリマインダーはまだありません' : 'リマインダーはありません。<br>下の入力欄に「明日9時 〇〇」のように送ると追加されます。'}</p>`;
+  else if (meta.grouped) {
+    const groups = new Map();
+    for (const r of rems) { const d = dueOf(r); const k = d < new Date(now.getFullYear(), now.getMonth(), now.getDate()) ? 'overdue' : ymd(d); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+    for (const [k, arr] of groups) {
+      let h;
+      if (k === 'overdue') h = '期限切れ';
+      else { const d = parseLocal(k + 'T00:00'); const diff = daysBetween(now, d); h = diff === 0 ? '今日' : diff === 1 ? '明日' : `${d.getMonth() + 1}月${d.getDate()}日(${WD[d.getDay()]})`; const hn = holidayName(d); if (hn) h += ` <small>${hn}</small>`; }
+      body += `<h3 class="day-h">${h}</h3><div class="items">${arr.map(rowHtml).join('')}</div>`;
+    }
+  } else body = `<div class="items">${rems.map(rowHtml).join('')}</div>`;
+  const doneCount = !view.smart ? S.reminders.filter(r => r.done && r.list === view.list).length : 0;
+  const extra = !view.smart ? `<p class="foot-note">完了済み ${doneCount}件 ・ <button class="navbtn" style="font-size:13px;min-height:0" id="editListBtn">リストを編集</button></p>` : '';
+  return `<h1 class="large" style="color:${color}">${esc(meta.name)}</h1>${body}${extra}`;
+}
+function rowHtml(r) {
+  if (isGroup(r)) return groupRowHtml(r);
+  const now = new Date();
+  const d = dueOf(r);
+  const subs = [];
+  if (r.done) subs.push(`<span>完了 ${esc(fmtDue(parseLocal(r.doneAt), now))}</span>`);
+  else if (d) subs.push(`<span class="${d < now ? 'over' : ''}">${esc(fmtDue(d, now))}</span>`);
+  if (r.rule) subs.push(`<span class="rep">${I.rep}${esc(describeRule(r.rule).replace(/ \d{1,2}:\d{2}(・\d{1,2}:\d{2})*/, ''))}</span>`);
+  if (r.nag && !r.done) subs.push(`<span class="badge">確実に ${r.nag.every}分</span>`);
+  if (r.snoozeUntil && !r.done) subs.push(`<span class="badge snz">スヌーズ中</span>`);
+  if (r.url) subs.push(`<a class="rlink" href="${esc(r.url)}" target="_blank" rel="noopener">${I.link}${esc(hostOf(r.url))}</a>`);
+  if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
+  const pr = r.priority ? `<span class="prio">${'!'.repeat(r.priority)}</span>` : '';
+  return `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
+    <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '完了にする'}"></button>
+    <button class="row-main" data-open="${r.id}"><div class="row-title">${pr}${esc(r.title)}</div>
+    ${subs.length ? `<div class="row-sub">${subs.join('')}</div>` : ''}${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
+    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`;
+}
+
+function groupRowHtml(r) {
+  const now = new Date();
+  const ts = stepTimes(r), nx = nextStep(r);
+  const doneN = r.steps.filter(x => x.done).length;
+  const subs = [];
+  if (r.done) subs.push(`<span>完了 ${esc(fmtDue(parseLocal(r.doneAt), now))}</span>`);
+  else if (nx) subs.push(`<span class="${nx.t < now ? 'over' : ''}">次: ${esc(nx.st.title)} ${esc(fmtDue(nx.t, now))}</span>`);
+  subs.push(`<span class="gbadge">グループ ${doneN}/${r.steps.length}</span>`);
+  if (r.urlMode === 'same' && r.url) subs.push(`<a class="rlink" href="${esc(r.url)}" target="_blank" rel="noopener">${I.link}${esc(hostOf(r.url))}</a>`);
+  if (r.urlMode === 'each') subs.push(`<span class="rep">${I.link}項目ごとのURL</span>`);
+  if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
+  const MAX = 6;
+  const chips = r.steps.slice(0, MAX).map((st, i) => `<span class="gs ${st.done ? 'done' : nx && nx.i === i ? 'next' : ''}">${esc(hm(ts[i]))} ${esc(st.title)}</span>`).join('') + (r.steps.length > MAX ? `<span class="gs">ほか${r.steps.length - MAX}件</span>` : '');
+  return `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
+    <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '次の項目を完了にする'}"></button>
+    <button class="row-main" data-open="${r.id}"><div class="row-title">${esc(r.title)}</div>
+    <div class="row-sub">${subs.join('')}</div><div class="gsteps">${chips}</div>${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
+    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`;
+}
+function completeStep(r, i) {
+  const st = r.steps[i]; if (!st) return '';
+  st.done = true; st.doneAt = fmtLocal(new Date()); st.snoozeUntil = null;
+  if (r.steps.every(x => x.done)) { r.done = true; r.doneAt = fmtLocal(new Date()); save(); return `「${st.title}」を完了。グループ「${r.title}」はすべて完了しました`; }
+  save();
+  const nx = nextStep(r);
+  return `「${st.title}」を完了（${r.steps.filter(x => x.done).length}/${r.steps.length}）${nx ? `。次は ${nx.st.title} ${fmtDue(nx.t)}` : ''}`;
+}
+
+// ---- 完了・スヌーズ ----
+function completeRem(r) {
+  const now = new Date();
+  r.history = r.history || [];
+  r.history.push(fmtLocal(now));
+  r.snoozeUntil = null; r.lastNotified = null; r.lastNagAt = null; r.nagCount = 0;
+  if (r.rule) {
+    r.count = (r.count || 0) + 1;
+    const next = nextOnComplete(r, now);
+    if (next) { r.due = fmtLocal(next); save(); return `次回は ${fmtDue(next)} です`; }
+  }
+  r.done = true; r.doneAt = fmtLocal(now); save();
+  return r.rule ? '繰り返しが終了しました' : '完了にしました';
+}
+function snooze(r, mins) {
+  const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() + mins);
+  r.snoozeUntil = fmtLocal(d); r.lastNotified = null; r.lastNagAt = null; save();
+  return `${fmtDue(d)} にもう一度お知らせします`;
+}
+
+// ---- イベント ----
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-smart],[data-list],[data-check],[data-open],#backBtn,#addListBtn,#editListBtn,#helpBtn,#dataBtn,.ex');
+  if (!t) return;
+  if (t.dataset.smart) { view = { name: 'list', smart: t.dataset.smart }; render(); $('#scroll').scrollTop = 0; }
+  else if (t.dataset.list) { view = { name: 'list', list: t.dataset.list }; render(); $('#scroll').scrollTop = 0; }
+  else if (t.dataset.check) {
+    const r = S.reminders.find(x => x.id === t.dataset.check); if (!r) return;
+    if (r.done) { r.done = false; r.doneAt = null; if (isGroup(r)) r.steps.forEach(x => { x.done = false; x.lastNotified = null; }); save(); render(); return; }
+    t.classList.add('on');
+    if (isGroup(r)) { setTimeout(() => { const nx = nextStep(r); if (nx) toast(esc(completeStep(r, nx.i))); render(); }, 380); return; }
+    setTimeout(() => { const msg = completeRem(r); toast(`「${esc(r.title)}」${msg}`); render(); }, 380);
+  }
+  else if (t.dataset.open) { const r = S.reminders.find(x => x.id === t.dataset.open); if (r && isGroup(r)) openGroupEditor(r.id); else openDetail(t.dataset.open); }
+  else if (t.id === 'backBtn') { view = { name: 'home' }; render(); }
+  else if (t.id === 'addListBtn') openListEditor(null);
+  else if (t.id === 'editListBtn') openListEditor(view.list);
+  else if (t.id === 'helpBtn') openHelp();
+  else if (t.id === 'dataBtn') openData();
+  else if (t.classList.contains('ex')) { const q = $('#quick'); q.value = t.dataset.ex; q.focus(); updatePreview(); }
+});
+
+// ---- 自然文入力（リマインくん式） ----
+const EXAMPLES = ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', '隔週火曜 7:30 燃えないゴミ', '偶数日 7時 水やり', '毎日8時と20時 薬 確実に', '平日8時 出社 祝日除く', '毎月第2火曜10時 定例', '毎月末 家計簿', '完了から1ヶ月後 歯ブラシ交換', '3日ごと 21時 ストレッチ', '寝る前に歯ブラシ持ってく'];
+$('#examples').innerHTML = EXAMPLES.map(x => `<button type="button" class="ex" data-ex="${esc(x)}">${esc(x)}</button>`).join('');
+function interpretation(p, url) {
+  const chips = [];
+  url = url || normUrl(p.url);
+  if (p.due) chips.push(`<span class="chip k">${I.bell.replace('<svg', '<svg width="12" height="12"')} ${esc(fmtDue(p.due))}</span>`);
+  else chips.push(`<span class="chip">日時なし</span>`);
+  if (p.rule) chips.push(`<span class="chip k">↻ ${esc(describeRule(p.rule))}</span>`);
+  if (p.nag) chips.push(`<span class="chip n">確実に: 完了まで${p.nag.every}分ごと</span>`);
+  if (url) chips.push(`<span class="chip u">${I.link} ${esc(hostOf(url))} を開く</span>`);
+  p.warn.forEach(w => chips.push(`<span class="chip w">${esc(w)}</span>`));
+  return chips.join('');
+}
+function updatePreview() {
+  const v = $('#quick').value.trim();
+  const pv = $('#preview');
+  $('#sendBtn').disabled = !v;
+  $('#examples').hidden = !!v;
+  if (!v) { pv.hidden = true; return; }
+  const p = parseInput(v);
+  const url = normUrl($('#quickUrl').value) || normUrl(p.url);
+  pv.hidden = false;
+  // 日時が読み取れないときは、リマインくんのように聞き返す代わりにワンタップの候補を出す
+  const ask = !p.due ? `<div class="pv-ask">いつ通知する？${QUICK_WHEN.map(([l, t]) => `<button type="button" data-append="${esc(t)}">${esc(l)}</button>`).join('')}</div>` : '';
+  pv.innerHTML = `<div class="pv-title">${esc(p.title)}</div><div class="chips">${interpretation(p, url)}</div>${ask}${p.notes.length ? `<div class="pv-note">${esc(p.notes.filter(n => n !== '相対時刻').join(' / '))}</div>` : ''}`;
+}
+const QUICK_WHEN = [['30分後', '30分後'], ['1時間後', '1時間後'], ['今夜', '今夜20時'], ['明日の朝', '明日 朝8時'], ['週末', '週末 10時']];
+$('#preview').addEventListener('click', e => {
+  const b = e.target.closest('[data-append]'); if (!b) return;
+  const q = $('#quick'); q.value = b.dataset.append + ' ' + q.value.trim(); updatePreview(); q.focus();
+});
+$('#quick').addEventListener('input', updatePreview);
+$('#quickUrl').addEventListener('input', () => { $('#linkBtn').classList.toggle('has', !!$('#quickUrl').value.trim()); updatePreview(); });
+$('#linkBtn').addEventListener('click', () => {
+  const row = $('#urlRow'); row.hidden = !row.hidden;
+  $('#linkBtn').setAttribute('aria-pressed', !row.hidden);
+  if (!row.hidden) $('#quickUrl').focus();
+});
+// 共有シートやコピーで URL を本文に貼ったときは URL 欄へ移す
+$('#quick').addEventListener('paste', e => {
+  const t = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+  const u = normUrl(t.trim());
+  if (u && /^\S+$/.test(t.trim())) { e.preventDefault(); $('#quickUrl').value = u; $('#urlRow').hidden = false; $('#linkBtn').setAttribute('aria-pressed', 'true'); $('#linkBtn').classList.add('has'); updatePreview(); }
+});
+$('#qform').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('#quick').value.trim(); if (!v) return;
+  const listId = view.list || 'inbox';
+  const extra = view.smart === 'flagged' ? { flagged: true } : {};
+  const fieldUrl = normUrl($('#quickUrl').value);
+  if ($('#quickUrl').value.trim() && !fieldUrl) { toast('URL は https:// から始まる形で入力してください'); $('#quickUrl').focus(); return; }
+  $('#quick').value = ''; $('#quickUrl').value = ''; $('#urlRow').hidden = true; $('#linkBtn').setAttribute('aria-pressed', 'false'); $('#linkBtn').classList.remove('has'); updatePreview();
+  if (quickMode()) {
+    const r = makeReminder(v, listId, extra);
+    if (fieldUrl) r.url = fieldUrl;
+    S.reminders.push(r); save(); registeredToast(r); render();
+  } else {
+    // 入力欄の文は「何をリマインドしますか？」への答えとして会話を始める
+    openWizard({ text: v, url: fieldUrl, listId, extra });
+  }
+});
+const quickMode = () => !!(S.settings && S.settings.quickAdd);
+function updateModeLbl() { $('#modeLbl').textContent = quickMode() ? 'すぐ登録モード' : ''; }
+function registeredToast(r) {
+  const when = r.due ? `次回は ${fmtDue(parseLocal(r.due))} です${r.rule ? `（↻ ${describeRule(r.rule)}）` : ''}` : '日時なしで追加しました';
+  toast(`<div class="bot"><b>り</b><div>「${esc(r.title)}」を登録しました。${esc(when)}${r.nag ? `。完了するまで${r.nag.every}分ごとに再通知します` : ''}${r.url ? `。通知をタップすると ${esc(hostOf(r.url))} を開きます` : ''}<button class="undo" data-undo="${r.id}">取り消す</button></div></div>`, 5000);
+}
+$('#newBtn').addEventListener('click', () => {
+  const v = $('#quick').value.trim();
+  const fieldUrl = normUrl($('#quickUrl').value);
+  $('#quick').value = ''; $('#quickUrl').value = ''; updatePreview();
+  openWizard({ text: v || null, url: fieldUrl, listId: view.list || 'inbox', extra: view.smart === 'flagged' ? { flagged: true } : {} });
+});
+
+// ---- 会話で登録（リマインくん式 → 純正風の確認画面） ----
+// 1) 何をリマインドする？ 2) いつ？ 3) 開くURLは？ 4) 確認画面。答え済みの項目は聞かずに飛ばす
+let W = null;
+const STEP_ORDER = ['what', 'when', 'url'];
+const whenText = (due, rule) => rule ? `${describeRule(rule)}（次回は${fmtDue(due)}）` : fmtDue(due);
+function openWizard(init) {
+  W = { log: [], step: 'what', title: null, due: null, rule: null, nag: null, url: init.url || null, listId: init.listId, extra: init.extra || {}, inputs: [], urlAsked: false };
+  openSheet(`<div class="sheet-h gut"><button class="navbtn" data-act="cancel">キャンセル</button><div class="t">新規リマインダー</div><span></span></div>
+    <div class="chat gut" id="wChat" aria-live="polite"></div>
+    <div class="chat-in gut"><div class="steps" id="wSteps"></div><div class="chips" id="wChips"></div>
+      <form id="wForm" autocomplete="off" novalidate><input id="wIn" type="text" enterkeyhint="next" aria-label="返事を入力"><button class="next" id="wNext" type="submit">次へ</button></form></div>`, sh => {
+    sh.classList.add('tall');
+    sh.querySelector('[data-act="cancel"]').onclick = () => { W = null; closeSheet(); };
+    sh.querySelector('#wForm').addEventListener('submit', e => { e.preventDefault(); wizardAnswer(sh.querySelector('#wIn').value); });
+    sh.querySelector('#wChips').addEventListener('click', e => { const b = e.target.closest('[data-ans]'); if (b) wizardAnswer(b.dataset.ans, b.textContent); });
+    wizardBot('何をリマインドしますか？', '「千葉、東京、神奈川」のように並べると、グループとして時間差で登録できます');
+    wizardPrompt();
+    if (init.text) setTimeout(() => wizardAnswer(init.text), 250);
+  });
+}
+function wizardBot(text, sub) { W.log.push({ who: 'bot', text, sub }); drawChat(); }
+function wizardMe(text) { W.log.push({ who: 'me', text }); drawChat(); }
+function drawChat() {
+  const c = document.querySelector('#wChat'); if (!c) return;
+  c.innerHTML = W.log.map((m, i) => m.who === 'bot'
+    ? `<div class="bub bot ${i === W.log.length - 1 ? 'pop' : ''}"><span class="av">り</span><div class="tx">${esc(m.text)}${m.sub ? `<span class="sub">${esc(m.sub)}</span>` : ''}</div></div>`
+    : `<div class="bub me ${i === W.log.length - 1 ? 'pop' : ''}"><div class="tx">${esc(m.text)}</div></div>`).join('');
+  c.scrollTop = c.scrollHeight;
+}
+function wizardPrompt() {
+  const inp = document.querySelector('#wIn'), chips = document.querySelector('#wChips'), next = document.querySelector('#wNext');
+  if (!inp) return;
+  const idx = Math.max(0, STEP_ORDER.indexOf(W.step));
+  document.querySelector('#wSteps').innerHTML = STEP_ORDER.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('') + '<i></i>';
+  inp.value = '';
+  if (W.step === 'what') {
+    inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の件、資料を送る'; next.textContent = '次へ'; chips.innerHTML = '';
+  } else if (W.step === 'when') {
+    inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の9時、毎週月曜8時、30分後'; next.textContent = '次へ';
+    chips.innerHTML = (W.sugg ? `<button type="button" data-ans="__sugg">${esc(whenText(W.sugg.due, W.sugg.rule))}</button>` : '') + [...QUICK_WHEN, ['毎日 朝8時', '毎日 朝8時'], ['平日 8時', '平日 8時']].map(([l, t]) => `<button type="button" data-ans="${esc(t)}">${esc(l)}</button>`).join('') + '<button type="button" class="skip" data-ans="__none">日時なし</button>';
+  } else if (W.step === 'url') {
+    inp.type = 'text'; inp.inputMode = 'url'; inp.autocapitalize = 'off'; inp.placeholder = 'https://…（なければ「なし」）'; next.textContent = '次へ';
+    chips.innerHTML = (W.surl ? `<button type="button" data-ans="__surl">${esc(hostOf(W.surl))}</button>` : '') + '<button type="button" class="skip" data-ans="">なし</button>';
+  } else if (W.step === 'groupAsk') {
+    inp.placeholder = ''; next.textContent = '次へ';
+    chips.innerHTML = '<button type="button" data-ans="__group">グループで登録</button><button type="button" class="skip" data-ans="__single">1件として登録</button>';
+  }
+  setTimeout(() => inp.focus(), 50);
+}
+function wizardAnswer(raw, label) {
+  if (!W) return;
+  const v = String(raw || '').trim();
+  const now = new Date();
+  if (W.step === 'what') {
+    if (!v) { wizardBot('内容を入力してください', '例: 「牛乳を買う」「明日の件」'); return; }
+    wizardMe(v); W.inputs.push(v);
+    const g = parseGroup(v, now);
+    if (g && g.items.length >= 2 && (g.every || g.due)) {
+      W.group = g; W.step = 'groupAsk';
+      wizardBot(`${g.items.length}件のリスト（${g.items.join('・')}）のようです。グループとしてまとめて登録しますか？`, '時間差で順番に通知し、まとめて管理・削除できます');
+      return wizardPrompt();
+    }
+    return afterWhat(v, now);
+  }
+  if (W.step === 'groupAsk') {
+    if (raw === '__group') { const g = W.group, init = { listId: W.listId, extra: W.extra }; W = null; closeSheet(); return openGroupEditor(null, { prefill: g, ...init }); }
+    wizardMe('1件として登録'); return afterWhat(W.inputs[W.inputs.length - 1], now);
+  }
+  if (W.step === 'when') {
+    if (raw === '__none') { wizardMe('日時なし'); wizardBot('日時なしでリストに入れておきますね。'); W.due = null; W.rule = null; return askUrl(); }
+    if (raw === '__sugg' && W.sugg) { wizardMe(label || whenText(W.sugg.due, W.sugg.rule)); W.due = W.sugg.due; W.rule = W.sugg.rule; wizardBot(`${whenText(W.due, W.rule)} ですね。`); return askUrl(); }
+    if (!v) { wizardBot('いつ通知するか入力するか、下の候補を選んでください'); return; }
+    wizardMe(label || v); W.inputs.push(v);
+    const p = parseInput(v, now);
+    if (!p.due) { wizardBot('ごめんなさい、日時が読み取れませんでした。', '「明日 9時」「来週金曜 15時」「毎月25日」のように書いてみてください'); return wizardPrompt(); }
+    W.due = p.due; W.rule = p.rule; if (p.nag) W.nag = p.nag; if (p.url && !W.surl) W.surl = normUrl(p.url);
+    wizardBot(`${whenText(p.due, p.rule)} ですね。`, p.notes.filter(n => n !== '相対時刻').join(' / ') || null);
+    return askUrl();
+  }
+  if (W.step === 'url') {
+    if (raw === '__surl' && W.surl) { wizardMe(W.surl); W.url = W.surl; wizardBot(`通知をタップすると ${hostOf(W.url)} を開くようにします。`); return finishWizard(); }
+    if (!v) { wizardMe('なし'); W.url = null; return finishWizard(); }
+    const u = normUrl(v);
+    if (!u) { wizardMe(v); wizardBot('URL として読めませんでした。', 'https:// から始まる形で入力するか、「なし」を押してください'); return wizardPrompt(); }
+    wizardMe(u); W.url = u;
+    wizardBot(`通知をタップすると ${hostOf(u)} を開くようにします。`);
+    return finishWizard();
+  }
+}
+// 1つ目の答えに日時や URL が含まれていても質問は省略せず、次の質問の候補として出す
+function afterWhat(v, now) {
+  const p = parseInput(v, now);
+  W.title = p.title; W.nag = p.nag;
+  W.surl = p.url ? normUrl(p.url) : W.surl;
+  W.sugg = p.due ? { due: p.due, rule: p.rule } : null;
+  W.step = 'when';
+  wizardBot(`「${p.title}」ですね。いつ通知すればいいですか？`, W.sugg ? '入力から読み取った日時を候補に出しています' : '「明日の9時」「毎週月曜」「30分後」など、話し言葉でどうぞ');
+  wizardPrompt();
+}
+function askUrl() {
+  W.step = 'url';
+  wizardBot('通知をタップしたときに開く URL はありますか？', 'なければ「なし」を押してください');
+  wizardPrompt();
+}
+function finishWizard() {
+  wizardBot('最後に内容を確認してください。');
+  const w = W;
+  setTimeout(() => {
+    if (W !== w) return;
+    const r = { id: uid(), title: w.title || 'リマインダー', notes: '', url: w.url, list: w.listId, due: w.due ? fmtLocal(w.due) : null, rule: w.rule, nag: w.nag,
+      flagged: false, priority: 0, done: false, doneAt: null, count: 0, history: [], input: w.inputs.join(' / '), createdAt: fmtLocal(new Date()), ...w.extra };
+    openDetail(r, { isNew: true });
+  }, 450);
+}
+function openWizardFrom(w) {
+  if (!w) return closeSheet();
+  const keep = w;
+  openWizard({ text: null, url: null, listId: keep.listId, extra: keep.extra });
+  Object.assign(W, keep, { log: keep.log.slice(0, -1) });
+  W.step = 'url';
+  W.log.push({ who: 'bot', text: '直したい項目があれば、確認画面でそのまま変更できます。URL を変えるならここで入力してください。' });
+  drawChat(); wizardPrompt();
+}
+
+// ---- トースト ----
+let toastTimer;
+$('#toast').addEventListener('click', e => {
+  const b = e.target.closest('[data-undo]'); if (!b) return;
+  S.reminders = S.reminders.filter(x => x.id !== b.dataset.undo); save(); render(); toast('取り消しました');
+});
+function toast(html, ms = 2600) {
+  const t = $('#toast'); t.innerHTML = html; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+
+// ---- シート共通 ----
+function openSheet(html, onMount) {
+  const w = $('#sheetWrap'), s = $('#sheet');
+  s.innerHTML = html; w.hidden = false;
+  w.onclick = e => { if (e.target === w) closeSheet(); };
+  onMount && onMount(s);
+}
+function closeSheet() { $('#sheetWrap').hidden = true; $('#sheet').innerHTML = ''; $('#sheet').classList.remove('tall'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheetWrap').hidden) closeSheet(); });
+const sheetHead = (title, right = '完了', left = 'キャンセル') => `<div class="sheet-h gut">${left ? `<button class="navbtn" data-act="cancel">${left}</button>` : '<span></span>'}<div class="t">${title}</div>${right ? `<button class="navbtn r" data-act="ok">${right}</button>` : '<span></span>'}</div>`;
+
+// ---- 詳細編集 ----
+function ruleKind(r) {
+  if (!r) return 'none';
+  if (r.freq === 'monthly') return r.byNth ? 'monthlyNth' : 'monthly';
+  return r.freq;
+}
+function openDetail(id, opts = {}) {
+  const isNew = !!opts.isNew;
+  const r = typeof id === 'object' ? id : S.reminders.find(x => x.id === id); if (!r) return;
+  const rule = r.rule ? JSON.parse(JSON.stringify(r.rule)) : null;
+  const k = ruleKind(rule);
+  const times = (rule && rule.times ? rule.times : [r.due ? r.due.slice(11) : '09:00']).join(', ');
+  const byDay = rule && rule.byDay ? rule.byDay : [parseLocal(r.due || fmtLocal(new Date())).getDay()];
+  const onlyDays = rule && rule.onlyDays ? rule.onlyDays : [];
+  const wdBtns = (name, sel) => [1, 2, 3, 4, 5, 6, 0].map(i => `<button type="button" data-wd="${name}" data-v="${i}" aria-pressed="${sel.includes(i)}">${WD[i]}</button>`).join('');
+  const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`;
+  const show = kinds => `data-kinds="${kinds}"`;
+  const html = sheetHead(isNew ? '内容の確認' : '詳細', isNew ? '登録' : '完了', isNew ? '戻る' : 'キャンセル') + `<div class="sheet-b gut" id="dForm">
+    ${isNew ? `<div class="confirm-note"><b>り</b><div>この内容で登録します。違うところがあれば、ここで直してから「登録」を押してください。</div></div>` : ''}
+    <div><div class="fgroup">
+      <div class="f"><input type="text" id="dTitle" value="${esc(r.title)}" aria-label="タイトル"></div>
+      <div class="f"><textarea id="dNotes" placeholder="メモ" aria-label="メモ">${esc(r.notes)}</textarea></div>
+      <div class="f"><input type="url" id="dUrl" value="${esc(r.url || '')}" placeholder="URL（通知をタップすると開く）" aria-label="URL"></div>
+    </div><div class="fgroup-f" id="dUrlMsg">通知をタップすると、このページが開きます。</div></div>
+    <div ${isNew ? 'hidden' : ''}><div class="fgroup-h">文章でまとめて変更</div><div class="fgroup">
+      <div class="f"><input type="text" id="dNl" placeholder="例: 隔週木曜 19時 祝日除く" aria-label="文章で変更"></div>
+    </div><div class="fgroup-f" id="dNlPv">入力すると日時と繰り返しを上書きします。</div></div>
+    <div><div class="fgroup-h">日時</div><div class="fgroup">
+      <div class="f"><span class="lab">次の通知</span><input type="datetime-local" id="dDue" value="${r.due || ''}"></div>
+      <div class="f"><span class="lab">繰り返し</span><select id="dKind">
+        ${opt('none', 'しない', k)}${opt('daily', '日ごと（毎日・隔日・N日）', k)}${opt('weekly', '週ごと（曜日・隔週）', k)}${opt('monthly', '月ごと（日付・末日）', k)}${opt('monthlyNth', '月ごと（第N曜日）', k)}${opt('yearly', '毎年', k)}${opt('parity', '偶数日・奇数日', k)}${opt('hourly', '時間ごと', k)}${opt('minutely', '分ごと', k)}${opt('afterDone', '完了してから', k)}
+      </select></div>
+      <div class="f" ${show('daily weekly monthly monthlyNth yearly hourly minutely afterDone')}><span class="lab" id="dIvLab">間隔</span><input type="number" id="dIv" min="1" max="999" value="${rule ? rule.interval || 1 : 1}"><span class="val" id="dIvUnit"></span>
+        <select id="dUnit" ${show('afterDone')}>${['minute', 'hour', 'day', 'week', 'month', 'year'].map(u => opt(u, UNIT_LABEL[u] + '後', rule && rule.unit || 'day')).join('')}</select></div>
+      <div ${show('weekly')}><div class="wd">${wdBtns('by', byDay)}</div></div>
+      <div class="f" ${show('monthly')}><span class="lab">日付（カンマ区切り、末日は -1）</span><input type="text" id="dMd" style="max-width:40%;text-align:right" value="${rule && rule.byMonthDay ? rule.byMonthDay.join(',') : (r.due ? +r.due.slice(8, 10) : 1)}"></div>
+      <div class="f" ${show('monthlyNth')}><span class="lab">第</span><select id="dNthN">${[1, 2, 3, 4, 5, -1].map(n => opt(n, n === -1 ? '最終' : '第' + n, rule && rule.byNth ? rule.byNth.n : 1)).join('')}</select>
+        <select id="dNthW">${[1, 2, 3, 4, 5, 6, 0].map(i => opt(i, WD[i] + '曜日', rule && rule.byNth ? rule.byNth.wd : 1)).join('')}</select></div>
+      <div class="f" ${show('yearly')}><span class="lab">月日</span><input type="number" id="dYm" min="1" max="12" value="${rule && rule.byMonth || (r.due ? +r.due.slice(5, 7) : 1)}"><span class="val">月</span><input type="number" id="dYd" min="1" max="31" value="${rule && rule.byMonthDay ? rule.byMonthDay[0] : (r.due ? +r.due.slice(8, 10) : 1)}"><span class="val">日</span></div>
+      <div class="f" ${show('parity')}><span class="lab">日付が</span><select id="dPar">${opt('even', '偶数の日', rule && rule.parity)}${opt('odd', '奇数の日', rule && rule.parity)}</select></div>
+      <div class="f" ${show('daily weekly monthly monthlyNth yearly parity')}><span class="lab">時刻（複数可）</span><input type="text" id="dTimes" style="max-width:45%;text-align:right" value="${esc(times)}" aria-label="時刻"></div>
+      <div ${show('daily parity monthly')}><div class="fgroup-f" style="margin-top:10px">対象の曜日（未選択ならすべて）</div><div class="wd">${wdBtns('only', onlyDays)}</div></div>
+      <div class="f" ${show('daily weekly monthly monthlyNth yearly parity')}><label for="dHol">祝日は通知しない</label><input type="checkbox" class="switch" id="dHol" ${rule && rule.skipHolidays ? 'checked' : ''}></div>
+      <div class="f" ${show('daily weekly monthly monthlyNth yearly parity hourly minutely afterDone')}><span class="lab">終了日</span><input type="date" id="dUntil" value="${rule && rule.until || ''}"></div>
+      <div class="f" ${show('daily weekly monthly monthlyNth yearly parity hourly minutely afterDone')}><span class="lab">回数で終了（0は無制限）</span><input type="number" id="dCount" min="0" value="${rule && rule.count || 0}"></div>
+    </div><div class="fgroup-f" id="dRuleTxt"></div></div>
+    <div><div class="fgroup-h">今後の予定</div><div class="fgroup"><div class="upc" id="dUpc"></div></div></div>
+    <div><div class="fgroup">
+      <div class="f"><label for="dNag">確実に通知</label><input type="checkbox" class="switch" id="dNag" ${r.nag ? 'checked' : ''}></div>
+      <div class="f" ${'id="dNagRow"'}><span class="lab">再通知の間隔</span><input type="number" id="dNagEv" min="1" max="120" value="${r.nag ? r.nag.every : 5}"><span class="val">分</span></div>
+    </div><div class="fgroup-f">完了を押すまで、指定した間隔で何度でも通知します。純正リマインダーやリマインくんにはない機能です。</div></div>
+    <div><div class="fgroup">
+      <div class="f"><label for="dFlag">フラグ</label><input type="checkbox" class="switch" id="dFlag" ${r.flagged ? 'checked' : ''}></div>
+      <div class="f"><span class="lab">優先順位</span><select id="dPri">${[0, 1, 2, 3].map(n => opt(n, ['なし', '低 (!)', '中 (!!)', '高 (!!!)'][n], r.priority || 0)).join('')}</select></div>
+      <div class="f"><span class="lab">リスト</span><select id="dList">${S.lists.map(l => opt(l.id, esc(l.name), r.list)).join('')}</select></div>
+    </div></div>
+    ${r.input ? `<div class="fgroup-f" style="margin-top:-12px">登録時の入力: 「${esc(r.input)}」</div>` : ''}
+    ${isNew ? `<button class="btn center" id="dRegister" style="background:var(--blue);color:#fff;border-radius:12px;font-weight:600">この内容で登録</button>` : ''}
+    <div ${isNew ? 'hidden' : ''}><div class="fgroup">
+      <button class="btn" id="dTest">この通知を今すぐ試す</button>
+      <button class="btn danger" id="dDel">リマインダーを削除</button>
+      <div id="dDelConfirm" hidden><div class="fgroup-f" style="margin:4px 16px 0">本当に削除しますか？元に戻せません。</div><button class="btn danger center" id="dDelYes" style="font-weight:600">削除する</button></div>
+    </div></div>
+  </div>`;
+  openSheet(html, sh => {
+    const g = id => sh.querySelector('#' + id);
+    const pressed = name => [...sh.querySelectorAll(`[data-wd="${name}"][aria-pressed="true"]`)].map(b => +b.dataset.v);
+    const buildRule = () => {
+      const kind = g('dKind').value;
+      if (kind === 'none') return null;
+      const iv = Math.max(1, +g('dIv').value || 1);
+      const ts = g('dTimes').value.split(/[,、\s]+/).map(x => x.trim()).filter(x => /^\d{1,2}:\d{2}$/.test(x)).map(x => x.padStart(5, '0'));
+      const dueD = parseLocal(g('dDue').value) || new Date();
+      const base = { interval: iv, start: (rule && rule.start && ruleKind(rule) === kind) ? rule.start : ymd(dueD) };
+      let nr;
+      switch (kind) {
+        case 'daily': nr = { ...base, freq: 'daily' }; break;
+        case 'weekly': nr = { ...base, freq: 'weekly', byDay: pressed('by').length ? pressed('by') : [dueD.getDay()] }; break;
+        case 'monthly': nr = { ...base, freq: 'monthly', byMonthDay: g('dMd').value.split(/[,、\s]+/).map(Number).filter(n => n === -1 || (n >= 1 && n <= 31)) }; if (!nr.byMonthDay.length) nr.byMonthDay = [dueD.getDate()]; break;
+        case 'monthlyNth': nr = { ...base, freq: 'monthly', byNth: { n: +g('dNthN').value, wd: +g('dNthW').value } }; break;
+        case 'yearly': nr = { ...base, interval: 1, freq: 'yearly', byMonth: +g('dYm').value || 1, byMonthDay: [+g('dYd').value || 1] }; break;
+        case 'parity': nr = { ...base, interval: 1, freq: 'parity', parity: g('dPar').value }; break;
+        case 'hourly': nr = { ...base, freq: 'hourly', times: [fmtLocal(dueD).slice(11)] }; break;
+        case 'minutely': nr = { ...base, freq: 'minutely', times: [fmtLocal(dueD).slice(11)] }; break;
+        case 'afterDone': nr = { ...base, freq: 'afterDone', unit: g('dUnit').value, times: [fmtLocal(dueD).slice(11)] }; break;
+      }
+      if (DATE_FREQS.includes(nr.freq)) {
+        nr.times = ts.length ? [...new Set(ts)].sort() : [fmtLocal(dueD).slice(11)];
+        if (g('dHol').checked) nr.skipHolidays = true;
+        if (['daily', 'parity', 'monthly'].includes(nr.freq) && !nr.byNth && pressed('only').length) nr.onlyDays = pressed('only');
+      }
+      if (g('dUntil').value) nr.until = g('dUntil').value;
+      if (+g('dCount').value > 0) nr.count = +g('dCount').value;
+      return nr;
+    };
+    const refresh = (recalcDue) => {
+      const kind = g('dKind').value;
+      sh.querySelectorAll('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(' ').includes(kind); });
+      g('dIvUnit').textContent = { daily: '日ごと', weekly: '週ごと', monthly: 'ヶ月ごと', monthlyNth: 'ヶ月ごと', yearly: '年ごと', hourly: '時間ごと', minutely: '分ごと', afterDone: '' }[kind] || '';
+      g('dNagRow').hidden = !g('dNag').checked;
+      const nr = buildRule();
+      if (recalcDue && nr && DATE_FREQS.includes(nr.freq)) {
+        const now = new Date();
+        const probe = { ...nr, start: ymd(now) };
+        const fst = nextAfter({ ...probe, interval: 1 }, now);
+        if (fst) { nr.start = ymd(fst); g('dDue').value = fmtLocal(fst); }
+      }
+      sh._rule = nr;
+      g('dRuleTxt').textContent = nr ? '↻ ' + describeRule(nr) : '繰り返しなし';
+      const tmp = { due: g('dDue').value || null, rule: nr, count: r.count };
+      const ups = upcoming(tmp, 6, new Date());
+      g('dUpc').innerHTML = ups.length ? ups.map(d => `<div>${esc(fmtDue(d))}${holidayName(d) ? `<span class="hol">${holidayName(d)}</span>` : ''}</div>`).join('') + (nr && nr.freq === 'afterDone' ? '<div class="val" style="font-size:13px">以降は完了した時点から計算します</div>' : '') : '<div class="val">日時が設定されていません</div>';
+    };
+    sh.querySelectorAll('[data-wd]').forEach(b => b.addEventListener('click', () => { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); refresh(true); }));
+    ['dKind', 'dIv', 'dMd', 'dNthN', 'dNthW', 'dYm', 'dYd', 'dPar', 'dTimes', 'dHol', 'dUnit'].forEach(id => g(id).addEventListener('change', () => refresh(true)));
+    ['dDue', 'dUntil', 'dCount', 'dNag'].forEach(id => g(id).addEventListener('change', () => refresh(false)));
+    g('dNl').addEventListener('input', () => {
+      const v = g('dNl').value.trim();
+      if (!v) { g('dNlPv').textContent = '入力すると日時と繰り返しを上書きします。'; return; }
+      const p = parseInput(v);
+      g('dNlPv').innerHTML = `<div class="chips">${interpretation(p)}</div>`;
+    });
+    g('dNl').addEventListener('change', () => {
+      const v = g('dNl').value.trim(); if (!v) return;
+      const p = parseInput(v);
+      // 文章の解釈をフォームへ反映
+      sh._nl = p;
+      if (p.url) g('dUrl').value = normUrl(p.url) || g('dUrl').value;
+      if (p.nag) { g('dNag').checked = true; g('dNagEv').value = p.nag.every; }
+      g('dDue').value = p.due ? fmtLocal(p.due) : '';
+      const kind = ruleKind(p.rule); g('dKind').value = kind;
+      if (p.rule) {
+        const pr = p.rule;
+        g('dIv').value = pr.interval || 1;
+        if (pr.times) g('dTimes').value = pr.times.join(', ');
+        sh.querySelectorAll('[data-wd]').forEach(b => {
+          const set = b.dataset.wd === 'by' ? (pr.byDay || []) : (pr.onlyDays || []);
+          b.setAttribute('aria-pressed', set.includes(+b.dataset.v));
+        });
+        if (pr.byMonthDay) { g('dMd').value = pr.byMonthDay.join(','); g('dYd').value = pr.byMonthDay[0]; }
+        if (pr.byMonth) g('dYm').value = pr.byMonth;
+        if (pr.byNth) { g('dNthN').value = pr.byNth.n; g('dNthW').value = pr.byNth.wd; }
+        if (pr.parity) g('dPar').value = pr.parity;
+        if (pr.unit) g('dUnit').value = pr.unit;
+        g('dHol').checked = !!pr.skipHolidays; g('dUntil').value = pr.until || ''; g('dCount').value = pr.count || 0;
+      }
+      refresh(false);
+      if (p.rule && p.rule.start && sh._rule) sh._rule.start = p.rule.start;
+    });
+    refresh(false);
+    sh.querySelector('[data-act="cancel"]').onclick = isNew ? () => openWizardFrom(W) : closeSheet;
+    const commit = () => {
+      r.title = g('dTitle').value.trim() || r.title;
+      r.notes = g('dNotes').value.trim();
+      const u = g('dUrl').value.trim();
+      if (u && !normUrl(u)) { g('dUrlMsg').style.color = 'var(--red)'; g('dUrlMsg').textContent = 'URL は https:// から始まる形で入力してください'; g('dUrl').focus(); return; }
+      r.url = normUrl(u);
+      const newDue = g('dDue').value || null;
+      if (newDue !== r.due) { r.snoozeUntil = null; r.lastNotified = null; }
+      r.due = newDue;
+      r.rule = sh._rule || null;
+      r.nag = g('dNag').checked ? { every: Math.max(1, +g('dNagEv').value || 5) } : null;
+      r.flagged = g('dFlag').checked; r.priority = +g('dPri').value; r.list = g('dList').value;
+      if (isNew) { S.reminders.push(r); W = null; save(); closeSheet(); render(); registeredToast(r); return; }
+      save(); closeSheet(); render(); toast('保存しました');
+    };
+    sh.querySelector('[data-act="ok"]').onclick = commit;
+    if (isNew) g('dRegister').onclick = commit;
+    g('dTest').onclick = () => { closeSheet(); notify(r, true); };
+    g('dDel').onclick = () => { g('dDelConfirm').hidden = false; g('dDel').hidden = true; };
+    g('dDelYes').onclick = () => { S.reminders = S.reminders.filter(x => x.id !== r.id); save(); closeSheet(); render(); toast('削除しました'); };
+  });
+}
+
+// ---- グループ編集（時間差で順番に通知するリスト） ----
+function nextHour() { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); return d; }
+function openGroupEditor(id, opts = {}) {
+  const orig = id ? S.reminders.find(x => x.id === id) : null;
+  const isNew = !orig;
+  const G = orig ? JSON.parse(JSON.stringify(orig)) : {
+    id: uid(), kind: 'group', title: '', notes: '', list: opts.listId || view.list || 'inbox', due: fmtLocal(nextHour()),
+    spacing: 'equal', every: { value: 30, unit: 'minute' }, urlMode: 'none', url: null,
+    steps: [{ id: uid(), title: '', after: { value: 30, unit: 'minute' } }, { id: uid(), title: '', after: { value: 30, unit: 'minute' } }],
+    flagged: false, priority: 0, done: false, doneAt: null, history: [], createdAt: fmtLocal(new Date()), ...(opts.extra || {}),
+  };
+  const applyParsed = g => {
+    G.steps = g.items.map(t => ({ id: uid(), title: t, after: { ...(g.every || G.every) } }));
+    if (g.every) { G.every = { ...g.every }; G.spacing = 'equal'; }
+    if (g.due) G.due = fmtLocal(g.due);
+    if (g.url) { G.urlMode = 'same'; G.url = normUrl(g.url); }
+  };
+  if (opts.prefill) applyParsed(opts.prefill);
+  const unitSel = (cls, cur, i) => `<select ${cls} ${i != null ? `data-i="${i}"` : ''}>${['minute', 'hour', 'day'].map(u => `<option value="${u}" ${cur === u ? 'selected' : ''}>${UNIT_JA[u]}</option>`).join('')}</select>`;
+  const body = () => {
+    const ts = stepTimes(G);
+    return `
+    <div><div class="fgroup">
+      <div class="f"><input type="text" id="gName" value="${esc(G.title)}" placeholder="グループ名（例: 地名チェック）" aria-label="グループ名"></div>
+    </div></div>
+    ${isNew ? `<div><div class="fgroup-h">文章でまとめて入力</div><div class="fgroup"><div class="inl"><input type="text" id="gNl" placeholder="9時から 千葉、東京、神奈川 を30分おき" aria-label="文章でまとめて入力"><button type="button" id="gNlGo">反映</button></div></div><div class="fgroup-f" id="gNlMsg">「、」で区切って並べると項目に分けます。</div></div>` : ''}
+    <div><div class="fgroup-h">タイミング</div><div class="fgroup">
+      <div class="f"><span class="lab">最初の通知</span><input type="datetime-local" id="gStart" value="${esc(G.due || '')}"></div>
+      <div class="seg" role="group" aria-label="間隔の決め方"><button type="button" data-sp="equal" aria-pressed="${G.spacing === 'equal'}">等間隔</button><button type="button" data-sp="each" aria-pressed="${G.spacing === 'each'}">項目ごとに設定</button></div>
+      ${G.spacing === 'equal' ? `<div class="f"><span class="lab">前の通知から</span><input type="number" id="gEvery" min="0" value="${G.every.value}">${unitSel('id="gEveryU"', G.every.unit)}<span class="val">後</span></div>` : ''}
+    </div></div>
+    <div><div class="fgroup-h">通知をタップしたときに開く URL</div><div class="fgroup">
+      <div class="seg" role="group" aria-label="URL"><button type="button" data-um="none" aria-pressed="${G.urlMode === 'none'}">なし</button><button type="button" data-um="same" aria-pressed="${G.urlMode === 'same'}">全部同じ</button><button type="button" data-um="each" aria-pressed="${G.urlMode === 'each'}">項目ごと</button></div>
+      ${G.urlMode === 'same' ? `<div class="f"><input type="url" id="gUrl" value="${esc(G.url || '')}" placeholder="https://…" aria-label="共通の URL"></div>` : ''}
+    </div></div>
+    <div><div class="fgroup-h">通知する内容（${G.steps.length}件）</div><div class="fgroup" id="gSteps">
+      ${G.steps.map((st, i) => `<div class="gstep ${st.done ? 'done' : ''}">
+        <span class="no">${i + 1}</span><input type="text" data-f="title" data-i="${i}" value="${esc(st.title)}" placeholder="例: ${['千葉', '東京', '神奈川', '長野'][i % 4]}" aria-label="${i + 1}件目の内容">
+        <span class="tm" id="gt${i}">${esc(ts[i] ? fmtDue(ts[i]) : '')}</span>
+        <button type="button" class="rm" data-rm="${i}" aria-label="${i + 1}件目を削除" ${G.steps.length <= 1 ? 'disabled' : ''}>−</button>
+        ${G.spacing === 'each' && i > 0 ? `<div class="sub">前の通知から<input type="number" min="0" data-f="av" data-i="${i}" value="${(st.after || {}).value ?? 30}">${unitSel('data-f="au"', (st.after || {}).unit || 'minute', i)}後</div>` : ''}
+        ${G.urlMode === 'each' ? `<div class="sub"><input type="url" data-f="url" data-i="${i}" value="${esc(st.url || '')}" placeholder="この項目の URL（任意）" aria-label="${i + 1}件目の URL"></div>` : ''}
+      </div>`).join('')}
+      <button class="btn" id="gAdd">＋ 項目を追加</button>
+      <div class="inl"><input type="text" id="gBulk" placeholder="まとめて追加: 埼玉、群馬、栃木" aria-label="まとめて追加"><button type="button" id="gBulkGo">追加</button></div>
+    </div><div class="gsum" id="gSum"></div></div>
+    <div><div class="fgroup">
+      <div class="f"><span class="lab">リスト</span><select id="gList">${S.lists.map(l => `<option value="${l.id}" ${G.list === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>
+      <div class="f"><label for="gFlag">フラグ</label><input type="checkbox" class="switch" id="gFlag" ${G.flagged ? 'checked' : ''}></div>
+    </div></div>
+    <div class="msg err" id="gErr" style="padding:0 4px"></div>
+    ${isNew ? `<button class="btn center" id="gRegister" style="background:var(--blue);color:#fff;border-radius:12px;font-weight:600">この内容で登録</button>` : `
+    <div><div class="fgroup">
+      <button class="btn" id="gTest">次の通知を今すぐ試す</button>
+      <button class="btn" id="gAllDone">すべて完了にする</button>
+      <button class="btn danger" id="gDel">グループをまとめて削除</button>
+      <div id="gDelC" hidden><div class="fgroup-f" style="margin:4px 16px 0">${G.steps.length}件の通知をすべて削除します。元に戻せません。</div><button class="btn danger center" id="gDelYes" style="font-weight:600">まとめて削除する</button></div>
+    </div></div>`}`;
+  };
+  openSheet(sheetHead(isNew ? 'グループで登録' : 'グループ', isNew ? '登録' : '完了') + `<div class="sheet-b gut" id="gBody"></div>`, sh => {
+    const B = sh.querySelector('#gBody');
+    const g = id => sh.querySelector('#' + id);
+    const draw = () => { const y = B.scrollTop; B.innerHTML = body(); B.scrollTop = y; refreshTimes(); };
+    const refreshTimes = () => {
+      const ts = stepTimes(G);
+      G.steps.forEach((_, i) => { const el = g('gt' + i); if (el) el.textContent = ts[i] ? fmtDue(ts[i]) : ''; });
+      const last = ts[ts.length - 1];
+      g('gSum').textContent = ts[0] ? `${fmtDue(ts[0])} から ${last ? fmtDue(last) : ''} まで、${G.steps.length}件を順番に通知します${ts[0] < new Date() && !G.steps.some(x => x.done) ? '（最初の通知が過去の時刻です。登録するとすぐ通知されます）' : ''}` : '最初の通知の日時を入れてください';
+    };
+    B.addEventListener('input', e => {
+      const t = e.target;
+      if (t.id === 'gName') G.title = t.value;
+      else if (t.id === 'gStart') G.due = t.value || null;
+      else if (t.id === 'gEvery') G.every.value = Math.max(0, +t.value || 0);
+      else if (t.id === 'gUrl') G.url = t.value.trim();
+      else if (t.dataset.f) {
+        const st = G.steps[+t.dataset.i];
+        if (t.dataset.f === 'title') st.title = t.value;
+        if (t.dataset.f === 'av') st.after = { ...(st.after || { unit: 'minute' }), value: Math.max(0, +t.value || 0) };
+        if (t.dataset.f === 'url') st.url = t.value.trim();
+      }
+      refreshTimes();
+    });
+    B.addEventListener('change', e => {
+      const t = e.target;
+      if (t.id === 'gEveryU') G.every.unit = t.value;
+      else if (t.dataset.f === 'au') { const st = G.steps[+t.dataset.i]; st.after = { ...(st.after || { value: 30 }), unit: t.value }; }
+      else if (t.id === 'gList') G.list = t.value;
+      else if (t.id === 'gFlag') G.flagged = t.checked;
+      refreshTimes();
+    });
+    const addItems = txt => txt.split(/[、,，・\n]+/).map(x => x.trim()).filter(Boolean).map(t => ({ id: uid(), title: t, after: { ...G.every } }));
+    B.addEventListener('click', e => {
+      const t = e.target.closest('button'); if (!t) return;
+      if (t.dataset.sp) {
+        // 等間隔→個別に切り替えたときは、今の間隔を各項目の初期値にする
+        if (t.dataset.sp === 'each' && G.spacing === 'equal') G.steps.forEach(st => { st.after = { ...G.every }; });
+        G.spacing = t.dataset.sp; draw();
+      } else if (t.dataset.um) { G.urlMode = t.dataset.um; draw(); }
+      else if (t.dataset.rm) { if (G.steps.length > 1) { G.steps.splice(+t.dataset.rm, 1); draw(); } }
+      else if (t.id === 'gAdd') { G.steps.push({ id: uid(), title: '', after: { ...G.every } }); draw(); const ins = B.querySelectorAll('[data-f="title"]'); ins[ins.length - 1].focus(); }
+      else if (t.id === 'gBulkGo') { const items = addItems(g('gBulk').value); G.steps = G.steps.filter(x => x.title.trim()).concat(items); if (!G.steps.length) G.steps = items; draw(); }
+      else if (t.id === 'gNlGo') {
+        const p = parseGroup(g('gNl').value);
+        if (!p) { g('gNlMsg').textContent = '2件以上を「、」で区切って書いてください。例: 9時から 千葉、東京、神奈川 を30分おき'; g('gNlMsg').style.color = 'var(--red)'; return; }
+        applyParsed(p); if (!G.title) G.title = ''; draw();
+        g('gNlMsg').style.color = ''; g('gNlMsg').textContent = `${p.items.length}件に分けました${p.every ? `（${p.every.value}${UNIT_JA[p.every.unit]}おき）` : ''}${p.due ? '' : '。最初の通知の日時を確認してください'}`;
+      }
+      else if (t.id === 'gTest') { closeSheet(); const nx = nextStep(orig); if (nx) notify(orig, true, nx.i); }
+      else if (t.id === 'gAllDone') { orig.steps.forEach(x => { x.done = true; }); orig.done = true; orig.doneAt = fmtLocal(new Date()); save(); closeSheet(); render(); toast(`「${esc(orig.title)}」をすべて完了にしました`); }
+      else if (t.id === 'gDel') { g('gDelC').hidden = false; t.hidden = true; }
+      else if (t.id === 'gDelYes') { S.reminders = S.reminders.filter(x => x.id !== orig.id); save(); closeSheet(); render(); toast(`グループ「${esc(orig.title)}」を削除しました`); }
+      else if (t.id === 'gRegister') commit();
+    });
+    const commit = () => {
+      const err = m => { g('gErr').textContent = m; g('gErr').scrollIntoView({ block: 'center' }); };
+      G.steps = G.steps.filter(x => String(x.title).trim());
+      if (!G.steps.length) { G.steps = [{ id: uid(), title: '', after: { ...G.every } }]; draw(); return err('通知する内容を1件以上入力してください'); }
+      if (!G.due || !parseLocal(G.due)) { draw(); return err('最初の通知の日時を入れてください'); }
+      if (G.urlMode === 'same') { const u = normUrl(G.url); if (!u) { draw(); return err('共通の URL は https:// から始まる形で入力してください'); } G.url = u; }
+      if (G.urlMode === 'each') { for (const st of G.steps) { if (st.url && !normUrl(st.url)) { draw(); return err(`「${st.title}」の URL が読めません`); } st.url = normUrl(st.url); } }
+      if (!G.title.trim()) G.title = `${G.steps[0].title} ほか${G.steps.length - 1}件`;
+      // 時刻を変えた項目は通知し直す
+      G.steps.forEach(st => { st.lastNotified = null; });
+      if (isNew) { S.reminders.push(G); save(); closeSheet(); render(); const ts = stepTimes(G); toast(`<div class="bot"><b>り</b><div>グループ「${esc(G.title)}」を登録しました。${esc(fmtDue(ts[0]))} から ${G.steps.length}件を順番に通知します<button class="undo" data-undo="${G.id}">取り消す</button></div></div>`, 5000); return; }
+      const ix = S.reminders.findIndex(x => x.id === G.id); if (ix >= 0) { G.done = G.steps.every(x => x.done); S.reminders[ix] = G; }
+      save(); closeSheet(); render(); toast('保存しました');
+    };
+    sh.querySelector('[data-act="cancel"]').onclick = closeSheet;
+    sh.querySelector('[data-act="ok"]').onclick = commit;
+    draw();
+  });
+}
+$('#newGroupBtn').addEventListener('click', () => {
+  const v = $('#quick').value.trim(); const p = v ? parseGroup(v) : null;
+  if (p) { $('#quick').value = ''; updatePreview(); }
+  openGroupEditor(null, { prefill: p, listId: view.list || 'inbox' });
+});
+
+// ---- リスト編集 ----
+function openListEditor(listId) {
+  const l = listId ? listById(listId) : { id: null, name: '', color: 'green' };
+  let color = l.color;
+  const html = sheetHead(listId ? 'リストを編集' : '新規リスト') + `<div class="sheet-b gut">
+    <div><div class="fgroup"><div class="f"><input type="text" id="lName" value="${esc(l.name)}" placeholder="リスト名" aria-label="リスト名"></div>
+    <div class="colors">${COLORS.map(c => `<button type="button" style="--c:var(--${c})" data-c="${c}" aria-label="${c}" aria-pressed="${c === color}"></button>`).join('')}</div></div></div>
+    ${listId && listId !== 'inbox' ? `<div><div class="fgroup"><button class="btn danger" id="lDel">リストを削除</button><div id="lDelC" hidden><div class="fgroup-f" style="margin:4px 16px 0">このリストのリマインダーは「${esc(S.lists[0].name)}」へ移します。</div><button class="btn danger center" id="lDelYes" style="font-weight:600">削除する</button></div></div></div>` : ''}
+  </div>`;
+  openSheet(html, sh => {
+    sh.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { color = b.dataset.c; sh.querySelectorAll('[data-c]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+    sh.querySelector('[data-act="cancel"]').onclick = closeSheet;
+    sh.querySelector('[data-act="ok"]').onclick = () => {
+      const name = sh.querySelector('#lName').value.trim(); if (!name) { sh.querySelector('#lName').focus(); return; }
+      if (listId) { l.name = name; l.color = color; } else S.lists.push({ id: uid(), name, color });
+      save(); closeSheet(); render();
+    };
+    const del = sh.querySelector('#lDel');
+    if (del) {
+      del.onclick = () => { sh.querySelector('#lDelC').hidden = false; del.hidden = true; };
+      sh.querySelector('#lDelYes').onclick = () => {
+        S.reminders.forEach(r => { if (r.list === listId) r.list = S.lists[0].id; });
+        S.lists = S.lists.filter(x => x.id !== listId); save(); closeSheet(); view = { name: 'home' }; render();
+      };
+    }
+  });
+}
+
+// ---- ファイル入出力 ----
+function exportObj() {
+  return { format: FORMAT, version: FORMAT_VERSION, exportedAt: fmtLocal(new Date()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
+    lists: S.lists, reminders: S.reminders.map(({ lastNotified, lastNagAt, nagCount, ...r }) => (isGroup(r) ? { ...r, steps: r.steps.map(({ lastNotified, snoozeUntil, ...st }) => st) } : r)) };
+}
+function validateImport(d) {
+  if (!d || typeof d !== 'object') throw new Error('JSON の形式ではありません');
+  if (d.format && d.format !== FORMAT) throw new Error(`format が "${d.format}" です。"${FORMAT}" のファイルを選んでください`);
+  if (!Array.isArray(d.reminders)) throw new Error('reminders 配列が見つかりません');
+  const lists = Array.isArray(d.lists) && d.lists.length ? d.lists.filter(l => l && l.id && l.name) : [{ id: 'inbox', name: 'リマインダー', color: 'blue' }];
+  const reminders = d.reminders.map((r, i) => {
+    if (!r || typeof r.title !== 'string') throw new Error(`${i + 1}件目に title がありません`);
+    if (r.due && !parseLocal(r.due)) throw new Error(`${i + 1}件目の due "${r.due}" が読めません（例: 2026-10-20T09:00）`);
+    if (r.rule && !['daily', 'weekly', 'monthly', 'yearly', 'parity', 'hourly', 'minutely', 'afterDone'].includes(r.rule.freq)) throw new Error(`${i + 1}件目の rule.freq "${r.rule.freq}" は未対応です`);
+    if (r.kind === 'group') {
+      if (!Array.isArray(r.steps) || !r.steps.length) throw new Error(`${i + 1}件目のグループに steps がありません`);
+      if (!parseLocal(r.due)) throw new Error(`${i + 1}件目のグループの due（最初の通知）が読めません`);
+      const unit = u => (['minute', 'hour', 'day'].includes(u) ? u : 'minute');
+      return { id: r.id || uid(), kind: 'group', title: r.title, notes: r.notes || '', list: lists.some(l => l.id === r.list) ? r.list : lists[0].id, due: r.due,
+        spacing: r.spacing === 'each' ? 'each' : 'equal', every: { value: Math.max(0, +(r.every || {}).value || 0), unit: unit((r.every || {}).unit) },
+        urlMode: ['none', 'same', 'each'].includes(r.urlMode) ? r.urlMode : 'none', url: normUrl(r.url),
+        steps: r.steps.map((st, j) => { if (!st || typeof st.title !== 'string') throw new Error(`${i + 1}件目のグループの${j + 1}番目に title がありません`); return { id: st.id || uid(), title: st.title, url: normUrl(st.url), after: { value: Math.max(0, +(st.after || {}).value || 0), unit: unit((st.after || {}).unit) }, done: !!st.done, doneAt: st.doneAt || null }; }),
+        flagged: !!r.flagged, priority: +r.priority || 0, done: !!r.done, doneAt: r.doneAt || null, history: [], createdAt: r.createdAt || fmtLocal(new Date()) };
+    }
+    return { id: r.id || uid(), title: r.title, notes: r.notes || '', url: normUrl(r.url), list: lists.some(l => l.id === r.list) ? r.list : lists[0].id, due: r.due || null, rule: r.rule || null, nag: r.nag || null,
+      flagged: !!r.flagged, priority: +r.priority || 0, done: !!r.done, doneAt: r.doneAt || null, count: +r.count || 0, history: Array.isArray(r.history) ? r.history : [], input: r.input || '', createdAt: r.createdAt || fmtLocal(new Date()), snoozeUntil: r.snoozeUntil || null };
+  });
+  return { lists, reminders };
+}
+function applyImport(d, mode) {
+  const v = validateImport(d);
+  if (mode === 'replace') { S = { format: FORMAT, version: FORMAT_VERSION, lists: v.lists, reminders: v.reminders }; }
+  else {
+    for (const l of v.lists) if (!S.lists.some(x => x.id === l.id)) S.lists.push(l);
+    const ids = new Set(S.reminders.map(r => r.id));
+    for (const r of v.reminders) { if (ids.has(r.id)) r.id = uid(); S.reminders.push(r); }
+    delete S.sampleData;
+  }
+  save(); render();
+  return v.reminders.length;
+}
+function openData() {
+  const json = JSON.stringify(exportObj(), null, 2);
+  let mode = 'merge';
+  const perm = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+  const html = sheetHead('ファイルと設定', '閉じる', '') + `<div class="sheet-b gut">
+    <div><div class="fgroup-h">エクスポート（${S.reminders.length}件）</div><div class="fgroup">
+      <button class="btn" id="xDl">JSON ファイルとして保存</button>
+      <button class="btn" id="xCopy">JSON をコピー</button>
+      <textarea class="mono" id="xTxt" readonly aria-label="エクスポートした JSON">${esc(json)}</textarea>
+      <div class="msg" id="xMsg"></div>
+    </div><div class="fgroup-f">ファイル名は rimain-YYYYMMDD.json。iCloud Drive やファイルアプリに置けば、別の端末でも読み込めます。保存ボタンが反応しない環境では、コピーしてメモ等に貼り付けてください。</div></div>
+    <div><div class="fgroup-h">インポート</div><div class="fgroup">
+      <div class="seg" role="group" aria-label="取り込み方法"><button type="button" data-mode="merge" aria-pressed="true">今のデータに追加</button><button type="button" data-mode="replace" aria-pressed="false">置き換える</button></div>
+      <div class="f"><label for="iFile" class="lab" style="color:var(--blue)">ファイルを選ぶ…</label><input type="file" id="iFile" accept="application/json,.json" style="position:absolute;width:1px;height:1px;opacity:0"></div>
+      <textarea class="mono" id="iTxt" placeholder="ここに JSON を貼り付けることもできます" aria-label="インポートする JSON" style="min-height:90px"></textarea>
+      <button class="btn" id="iGo">貼り付けた JSON を取り込む</button>
+      <div class="msg" id="iMsg"></div>
+    </div></div>
+    <div><div class="fgroup-h">登録のしかた</div><div class="fgroup">
+      <div class="f"><label for="sQuick">入力欄からすぐ登録</label><input type="checkbox" class="switch" id="sQuick" ${quickMode() ? 'checked' : ''}></div>
+    </div><div class="fgroup-f">オフ（標準）: 入力欄に書いて送ると、足りない項目だけを会話で聞き、最後に確認画面を出します。オン: リマインくんのように送った時点で登録します（取り消しボタン付き）。</div></div>
+    ${window.rimainPushUI ? '<div id="pushBox"></div>' : `<div><div class="fgroup-h">通知</div><div class="fgroup">
+      <div class="f"><span class="lab">端末の通知</span><span class="val" id="nState">${{ granted: '許可済み', denied: '拒否', default: '未設定', unsupported: 'この環境では使えません' }[perm]}</span></div>
+      <button class="btn" id="nAsk" ${perm === 'default' ? '' : 'hidden'}>通知を許可する</button>
+    </div><div class="fgroup-f">このモックはアプリを開いている間、画面上部のバナーで通知します。閉じている間の通知（Web Push）はホーム画面に追加するアプリ版で使えます。</div></div>`}
+    <div><div class="fgroup">
+      <button class="btn danger" id="rSample">サンプルデータに戻す</button>
+      <div id="rSampleC" hidden><div class="fgroup-f" style="margin:4px 16px 0">今のリマインダーはすべて消えます。先にエクスポートしておくと安全です。</div><button class="btn danger center" id="rSampleYes" style="font-weight:600">サンプルに戻す</button></div>
+    </div></div>
+  </div>`;
+  openSheet(html, sh => {
+    const g = id => sh.querySelector('#' + id);
+    sh.querySelector('[data-act="ok"]').onclick = closeSheet;
+    g('xDl').onclick = async () => {
+      const filename = `rimain-${ymd(new Date()).replace(/-/g, '')}.json`;
+      // claude.ai 上では downloads 機能で保存、単体の HTML ではブラウザのダウンロードを使う
+      const dl = window.claude && window.claude.use ? await window.claude.use('downloads').catch(() => null) : null;
+      if (dl) {
+        try { await dl.save({ filename, data: json }); g('xMsg').className = 'msg ok'; g('xMsg').textContent = `${filename} を保存しました`; }
+        catch (e) { g('xMsg').className = e.code === 'declined' ? 'msg' : 'msg err'; g('xMsg').textContent = e.code === 'declined' ? '保存をキャンセルしました' : 'ここでは保存できませんでした。「JSON をコピー」を使ってください。'; }
+        return;
+      }
+      try {
+        const blob = new Blob([json], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = `rimain-${ymd(new Date()).replace(/-/g, '')}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        g('xMsg').className = 'msg ok'; g('xMsg').textContent = '保存を開始しました。保存されない場合は「JSON をコピー」を使ってください。';
+      } catch (e) { g('xMsg').className = 'msg err'; g('xMsg').textContent = 'この環境ではファイル保存ができません。「JSON をコピー」を使ってください。'; }
+    };
+    g('xCopy').onclick = () => {
+      const ok = () => { g('xMsg').className = 'msg ok'; g('xMsg').textContent = 'コピーしました'; };
+      const fallback = () => { const t = g('xTxt'); t.focus(); t.select(); g('xMsg').className = 'msg'; g('xMsg').textContent = '下のテキストを選択しました。コピーしてください。'; };
+      try { navigator.clipboard.writeText(json).then(ok, fallback); } catch (e) { fallback(); }
+    };
+    sh.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { mode = b.dataset.mode; sh.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+    const doImport = text => {
+      try { const n = applyImport(JSON.parse(text), mode); g('iMsg').className = 'msg ok'; g('iMsg').textContent = `${n}件を${mode === 'replace' ? '置き換えて' : '追加して'}取り込みました`; }
+      catch (e) { g('iMsg').className = 'msg err'; g('iMsg').textContent = e instanceof SyntaxError ? 'JSON として読めませんでした。括弧やカンマを確認してください' : e.message; }
+    };
+    g('iFile').onchange = e => { const f = e.target.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => doImport(String(fr.result)); fr.readAsText(f); };
+    g('iGo').onclick = () => { const t = g('iTxt').value.trim(); if (t) doImport(t); };
+    if (window.rimainPushUI) window.rimainPushUI(g('pushBox'));
+    if (g('nAsk')) g('nAsk').onclick = async () => {
+      try { const p = await Notification.requestPermission(); g('nState').textContent = { granted: '許可済み', denied: '拒否', default: '未設定' }[p] || p; g('nAsk').hidden = p !== 'default'; }
+      catch (e) { g('nState').textContent = 'この環境では使えません'; g('nAsk').hidden = true; }
+    };
+    g('sQuick').onchange = e => { S.settings = { ...(S.settings || {}), quickAdd: e.target.checked }; save(); updateModeLbl(); };
+    g('rSample').onclick = () => { g('rSampleC').hidden = false; g('rSample').hidden = true; };
+    g('rSampleYes').onclick = () => { S = sample(); save(); closeSheet(); view = { name: 'home' }; render(); toast('サンプルに戻しました'); };
+  });
+}
+
+// ---- 書き方ガイド ----
+function openHelp() {
+  const G = [
+    ['話し言葉でOK', ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', 'ちょっとしたら電話する', '寝る前に歯ブラシ持ってく', '仕事終わりに牛乳買う', '週明けに請求書出す', '明日10時に「資料を印刷」ってリマインドして', '明日9時 https://example.com 朝会']],
+    ['いつ', ['30分後 洗濯物', '明日10時 会議', '来週金曜 15時 提出', '10/25 18時半 歯医者', '25日 家賃', '今夜9時 ゴミ出し']],
+    ['基本の繰り返し', ['毎日7時 薬', '毎朝 ストレッチ', '毎週月水金 20時 筋トレ', '平日8時 出社', '土日10時 掃除', '毎月25日 振込', '毎年3月10日 誕生日']],
+    ['りまいんだけの繰り返し', ['隔週火曜 7:30 燃えないゴミ', '隔日 21時 筋トレ', '3日ごと 水やり', '偶数日 7時 水やり', '奇数日の平日 12時 英単語', '毎月第2火曜 10時 定例', '毎月最終金曜 18時 飲み会', '毎月末 家計簿', '隔月 15日 美容院', '毎日8時と20時 薬', '3時間ごと 水分補給', '完了から1ヶ月後 歯ブラシ交換']],
+    ['グループ（下の「グループ」ボタンでも作れます）', ['9時から 千葉、東京、神奈川、長野 を30分おき', '明日10時 資料A、資料B、資料C を1時間おき']],
+    ['条件・確実さ', ['平日8時 出社 祝日除く', '毎週火曜 19時 ジム 12/31まで', '毎日 21時 日記 5回まで', '毎日8時 薬 確実に', '明日7時 ゴミ出し 10分ごとに再通知']],
+  ];
+  const Y = '<span class="yes">○</span>', N = '<span class="no">×</span>', P = t => `<span class="part">${t}</span>`;
+  const rows = [
+    ['文章だけで登録', Y, P('入力中に候補'), Y],
+    ['毎日・毎週・毎月・毎年', Y, Y, Y],
+    ['平日のみ', N, Y, Y],
+    ['隔週・N週ごと', N, Y, Y],
+    ['隔日・N日ごと', N, Y, Y],
+    ['第N曜日・最終曜日', N, Y, Y],
+    ['1日に複数の時刻', N, N, Y],
+    ['偶数日・奇数日', N, N, Y],
+    ['祝日を除く', N, N, Y],
+    ['完了してから N 日後', N, N, Y],
+    ['完了するまで再通知', N, N, Y],
+    ['スヌーズ', Y, P('通知から'), Y],
+    ['ファイルで入出力', N, N, Y],
+    ['時間差で順番に通知するグループ', N, N, Y],
+    ['通知から URL を開く', N, P('URL欄はあるが通知からは開かない'), Y],
+  ];
+  const html = sheetHead('書き方ガイド', '閉じる', '') + `<div class="sheet-b gut">
+    <div class="fgroup-f" style="margin-top:0">LINE で送る感覚で、話しかけるように書いてください。語順は自由で、「えーと」「(笑)」「お願い」などは無視します。日時が読み取れないときは候補を出します。「」で囲んだ部分はそのまま通知の文になります。URL を書くか左のリンクボタンから付けると、通知をタップしたときに開きます。</div>
+    ${G.map(([h, xs]) => `<div><div class="fgroup-h">${h}</div><div class="fgroup"><div class="guide">${xs.map(x => `<div><code data-try="${esc(x)}">${esc(x)}</code> <span class="val" style="font-size:13px">→ ${esc((() => { const gp = parseGroup(x); if (gp && gp.every) return `グループ ${gp.items.length}件・${gp.every.value}${UNIT_JA[gp.every.unit]}おき`; const p = parseInput(x); return p.rule ? describeRule(p.rule) : p.due ? fmtDue(p.due) : '日時なし'; })())}${(() => { const p = parseInput(x); return p.nag ? '・確実に' : ''; })()}</span></div>`).join('')}</div></div></div>`).join('')}
+    <div><div class="fgroup-h">リマインくん・純正リマインダーとの比較</div><div class="fgroup tbl-wrap"><table class="cmp"><thead><tr><th>機能</th><th>リマインくん</th><th>純正</th><th>りまいん</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table></div>
+    <div class="fgroup-f">「N日おき」は「1日おき＝隔日」と同じ数え方で、N+1日ごとになります。迷ったら「N日ごと」と書いてください。祝日は内閣府の規則から計算しています（特例で移動した年は未対応）。</div></div>
+  </div>`;
+  openSheet(html, sh => {
+    sh.querySelector('[data-act="ok"]').onclick = closeSheet;
+    sh.querySelectorAll('[data-try]').forEach(c => c.onclick = () => { closeSheet(); const q = $('#quick'); q.value = c.dataset.try; updatePreview(); q.focus(); });
+  });
+}
+
+// ---- 通知ループ ----
+const queue = [];
+function notify(r, test = false, step = null) {
+  if (!queue.some(x => x.id === r.id && x.step === step)) queue.push({ id: r.id, test, step });
+  const st = step != null ? r.steps[step] : null;
+  const title = st ? st.title : r.title;
+  const url = st ? stepUrl(r, st) : r.url;
+  try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden && !window.rimainPushOn) { const n = new Notification(title, { body: url ? 'タップして開く: ' + url : st ? `${r.title}（${step + 1}/${r.steps.length}）` : r.rule ? describeRule(r.rule) : 'りまいん', tag: r.id + (st ? ':' + step : '') }); if (url) n.onclick = () => { window.open(url, '_blank', 'noopener'); n.close(); }; } } catch (e) {}
+  showBanner();
+}
+function showBanner() {
+  const b = $('#banner');
+  if (!queue.length) { b.hidden = true; return; }
+  const { id, test, step } = queue[0];
+  const r0 = S.reminders.find(x => x.id === id);
+  if (!r0 || (step != null && !r0.steps[step])) { queue.shift(); return showBanner(); }
+  // グループの項目は、その項目の内容と URL で通知する
+  let r = r0, sub;
+  if (step != null) {
+    const st = r0.steps[step], ts = stepTimes(r0), nxt = r0.steps[step + 1];
+    r = { id: r0.id, title: st.title, url: stepUrl(r0, st) };
+    sub = `${r0.title}（${step + 1}/${r0.steps.length}）${nxt ? ` ・ 次: ${nxt.title} ${hm(ts[step + 1])}` : ' ・ 最後の項目'}`;
+  } else sub = [r.rule ? '↻ ' + describeRule(r.rule) : '', r.nag ? `完了するまで${r.nag.every}分ごとにお知らせします` : ''].filter(Boolean).join(' ・ ');
+  b.innerHTML = `<div class="bn-top"><span class="appic">り</span>りまいん${test ? '（テスト）' : ''}${queue.length > 1 ? ` ・ ほか${queue.length - 1}件` : ''}<span class="when">今</span></div>
+    ${r.url ? `<a class="bn-main" href="${esc(r.url)}" target="_blank" rel="noopener" data-bn-open><div class="bn-title">${esc(r.title)}</div>${sub ? `<div class="bn-sub">${esc(sub)}</div>` : ''}<div class="bn-url">タップして開く: ${esc(r.url)}</div></a>`
+      : `<div><div class="bn-title">${esc(r.title)}</div>${sub ? `<div class="bn-sub">${esc(sub)}</div>` : ''}</div>`}
+    <div class="bn-acts">${r.url ? `<a class="pri btnlike" href="${esc(r.url)}" target="_blank" rel="noopener" data-bn-open>開く</a>` : ''}<button class="${r.url ? '' : 'pri'}" data-bn="done">完了</button><button data-bn="5">5分後</button><button data-bn="60">1時間後</button><button data-bn="1440">明日</button>${test ? '<button data-bn="close">閉じる</button>' : ''}</div>`;
+  b.hidden = false;
+  // URL を開いたら通知は閉じる（完了にはしない。繰り返しの次回はそのまま）
+  b.querySelectorAll('[data-bn-open]').forEach(a => a.addEventListener('click', () => { setTimeout(() => { queue.shift(); render(); showBanner(); }, 50); }));
+  b.querySelectorAll('[data-bn]').forEach(btn => btn.onclick = () => {
+    const a = btn.dataset.bn; let msg = '';
+    if (!test || a !== 'close') {
+      if (step != null) {
+        if (a === 'done') msg = esc(completeStep(r0, step));
+        else if (a !== 'close') { const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() + +a); r0.steps[step].snoozeUntil = fmtLocal(d); r0.steps[step].lastNotified = null; save(); msg = `${fmtDue(d)} にもう一度お知らせします`; }
+      } else if (a === 'done') msg = `「${esc(r.title)}」${completeRem(r)}`;
+      else if (a !== 'close') msg = snooze(r, +a);
+    }
+    queue.shift(); render(); if (msg) toast(msg); showBanner();
+  });
+}
+function tick() {
+  const now = new Date();
+  for (const r of S.reminders) {
+    if (r.done) continue;
+    if (isGroup(r)) {
+      const ts = stepTimes(r);
+      r.steps.forEach((st, i) => {
+        if (st.done) return;
+        const t = st.snoozeUntil ? parseLocal(st.snoozeUntil) : ts[i];
+        if (!t || t > now) return;
+        const key = fmtLocal(t);
+        if (st.lastNotified !== key) { st.lastNotified = key; save(); notify(r, false, i); }
+      });
+      continue;
+    }
+    const d = dueOf(r); if (!d || d > now) continue;
+    const key = r.snoozeUntil || r.due;
+    if (r.lastNotified !== key) {
+      r.lastNotified = key; r.lastNagAt = fmtLocal(now) + ':' + pad(now.getSeconds()); r.nagCount = 0; save(); notify(r);
+    } else if (r.nag && r.lastNagAt && (r.nagCount || 0) < 24) {
+      const last = new Date(r.lastNagAt.slice(0, 16)); last.setSeconds(+r.lastNagAt.slice(17) || 0);
+      if (now - last >= r.nag.every * 60000) { r.lastNagAt = fmtLocal(now) + ':' + pad(now.getSeconds()); r.nagCount = (r.nagCount || 0) + 1; save(); notify(r); }
+    }
+  }
+}
+
+// ---- 起動 ----
+S = load() || sample();
+save();
+render();
+updatePreview();
+updateModeLbl();
+tick();
+setInterval(tick, 10000);
+setInterval(() => { if ($('#sheetWrap').hidden && !document.activeElement?.closest?.('#scroll')) render(); }, 60000);
+</script>
