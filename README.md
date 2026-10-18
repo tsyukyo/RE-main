@@ -15,7 +15,7 @@
 1. このリポジトリを GitHub に置く
 2. Cloudflare ダッシュボード →「Workers & Pages」→「Create」→「Import a repository」→ このリポジトリを選ぶ
 3. ビルドコマンドは空欄、デプロイコマンドは `npx wrangler deploy` のまま「Deploy」
-4. 表示された `https://rimain.<アカウント名>.workers.dev` を iPhone の Safari で開き、共有 →「ホーム画面に追加」
+4. 表示された `https://re-main.<アカウント名>.workers.dev`（Worker 名は wrangler.jsonc の name と Cloudflare 側の名前を一致させる） を iPhone の Safari で開き、共有 →「ホーム画面に追加」
 5. ホーム画面のりまいんを開き、設定（右上）→「閉じている間の通知」→「オンにする」→「テスト通知を送る」
 
 以後は GitHub に push するたびに自動で更新されます。

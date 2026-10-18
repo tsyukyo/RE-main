@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "rimain",
+  "name": "re-main",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
   // アプリ本体（PWA）は静的ファイルとして配信し、/api/ だけ Worker で処理する
