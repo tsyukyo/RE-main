@@ -133,8 +133,13 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .chip.n { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
 .chip.w { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
 .pv-note { font-size: 12px; color: var(--fg2); }
-.pv-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--fg2); }
-.pv-ask button { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; }
+.pv-ask { display: grid; gap: 6px; font-size: 13px; color: var(--fg2); }
+.pv-ask-b { max-height: min(34svh, 42vh); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 8px; margin-inline: -4px; padding: 0 4px 2px; }
+.pv-ask button { font-size: 15px; min-height: 40px; padding: 0 15px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; }
+.wg { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.wg-h { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--fg2); letter-spacing: .04em; margin-bottom: -2px; }
+.chat-in .chips.when { display: grid; gap: 10px; max-height: min(34svh, 42vh); overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
+.chat-in .chips button.sugg { background: var(--blue); color: #fff; border-color: transparent; }
 .linkbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); flex: none; }
 .linkbtn[aria-pressed="true"], .linkbtn.has { color: var(--blue); }
 .linkbtn svg { width: 22px; height: 22px; }
@@ -162,7 +167,7 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 @keyframes pop { from { transform: translateY(10px) scale(.9); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bub.pop { animation: none; } }
 .chat-in { border-top: .5px solid var(--sep); background: var(--bar); padding-block: 8px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
-.chat-in .chips button { font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); color: var(--blue); font-weight: 600; }
+.chat-in .chips button { font-size: 16px; min-height: 42px; padding: 0 16px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); color: var(--blue); font-weight: 600; }
 .chat-in .chips button.skip { color: var(--fg); }
 .chat-in form { display: flex; gap: 8px; }
 .chat-in input { flex: 1; min-width: 0; height: 50px; border-radius: 25px; border: .5px solid var(--sep); background: var(--card); padding: 0 18px; font-size: 17px; outline: none; transition: border-color .2s, box-shadow .25s var(--ease-out); }
@@ -889,10 +894,25 @@ function updatePreview() {
   const url = normUrl($('#quickUrl').value) || normUrl(p.url);
   pv.hidden = false;
   // 日時が読み取れないときは、リマインくんのように聞き返す代わりにワンタップの候補を出す
-  const ask = !p.due ? `<div class="pv-ask">いつ通知する？${QUICK_WHEN.map(([l, t]) => `<button type="button" data-append="${esc(t)}">${esc(l)}</button>`).join('')}</div>` : '';
+  const ask = !p.due ? `<div class="pv-ask"><div class="pv-ask-h">いつ通知する？</div><div class="pv-ask-b">${whenChips('data-append')}</div></div>` : '';
   pv.innerHTML = `<div class="pv-title">${esc(p.title)}</div><div class="chips">${interpretation(p, url)}</div>${ask}${p.notes.length ? `<div class="pv-note">${esc(p.notes.filter(n => n !== '相対時刻').join(' / '))}</div>` : ''}`;
 }
-const QUICK_WHEN = [['30分後', '30分後'], ['1時間後', '1時間後'], ['今夜', '今夜'], ['明日の朝', '明日 朝8時'], ['週末', '週末 10時']];
+// 通知時間の候補。今日の時刻は過ぎたものを出さない
+function whenGroups(now = new Date()) {
+  const h = now.getHours(), WDN = '日月火水木金土';
+  const today = [[12, '今日 12時'], [15, '今日 15時'], [18, '今日 18時'], [21, '今日 21時']].filter(([t]) => t > h).map(([, t]) => [t.replace('今日 ', '').replace('時', ':00'), t]);
+  if (h < 23) today.splice(Math.max(0, today.length - 1), 0, ['今夜', '今夜']);
+  const wk = [now.getDay() === 6 || now.getDay() === 0 ? null : ['週末', '週末 10時'], ['月曜 9:00', '月曜 9時'], ['金曜 18:00', '金曜 18時'], ['土曜 10:00', '土曜 10時']].filter(Boolean);
+  if (now.getDay() !== 0 && now.getDay() !== 6) wk.push(['日曜 10:00', '日曜 10時']);
+  return [
+    ['すぐ', [['10分後', '10分後'], ['30分後', '30分後'], ['1時間後', '1時間後'], ['2時間後', '2時間後'], ['3時間後', '3時間後']]],
+    ['今日', today],
+    ['明日', [['7:00', '明日 朝7時'], ['8:00', '明日 朝8時'], ['9:00', '明日 9時'], ['12:00', '明日 12時'], ['18:00', '明日 18時'], ['21:00', '明日 21時']]],
+    ['今週・来週', wk.filter(([l]) => !l.startsWith(WDN[now.getDay()]))],
+    ['くり返し', [['毎朝 7:00', '毎日 朝7時'], ['毎朝 8:00', '毎日 朝8時'], ['毎晩 21:00', '毎日 21時'], ['平日 8:00', '平日 8時'], ['毎週月曜 9:00', '毎週月曜 9時'], ['隔週月曜 9:00', '隔週月曜 9時'], ['毎月1日 9:00', '毎月1日 9時'], ['毎月末 9:00', '毎月末 9時']]],
+  ].filter(([, a]) => a.length);
+}
+const whenChips = (attr, now) => whenGroups(now).map(([g, a]) => `<div class="wg"><span class="wg-h">${g}</span>${a.map(([l, t]) => `<button type="button" ${attr}="${esc(t)}">${esc(l)}</button>`).join('')}</div>`).join('');
 $('#preview').addEventListener('click', e => {
   const b = e.target.closest('[data-append]'); if (!b) return;
   const q = $('#quick'); q.value = b.dataset.append + ' ' + q.value.trim(); updatePreview(); q.focus();
@@ -976,12 +996,13 @@ function wizardPrompt() {
   if (!inp) return;
   const idx = Math.max(0, STEP_ORDER.indexOf(W.step));
   document.querySelector('#wSteps').innerHTML = STEP_ORDER.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('') + '<i></i>';
-  inp.value = '';
+  inp.value = ''; chips.classList.remove('when'); chips.scrollTop = 0;
   if (W.step === 'what') {
     inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の件、資料を送る'; next.textContent = '次へ'; chips.innerHTML = '';
   } else if (W.step === 'when') {
     inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の9時、毎週月曜8時、30分後'; next.textContent = '次へ';
-    chips.innerHTML = (W.sugg ? `<button type="button" data-ans="__sugg">${esc(whenText(W.sugg.due, W.sugg.rule))}</button>` : '') + [...QUICK_WHEN, ['毎日 朝8時', '毎日 朝8時'], ['平日 8時', '平日 8時']].map(([l, t]) => `<button type="button" data-ans="${esc(t)}">${esc(l)}</button>`).join('') + '<button type="button" class="skip" data-ans="__none">日時なし</button>';
+    chips.innerHTML = (W.sugg ? `<div class="wg"><span class="wg-h">入力から読み取った日時</span><button type="button" class="sugg" data-ans="__sugg">${esc(whenText(W.sugg.due, W.sugg.rule))}</button></div>` : '') + whenChips('data-ans') + '<div class="wg"><button type="button" class="skip" data-ans="__none">日時なし</button></div>';
+    chips.classList.add('when');
   } else if (W.step === 'url') {
     inp.type = 'text'; inp.inputMode = 'url'; inp.autocapitalize = 'off'; inp.placeholder = 'https://…（なければ「なし」）'; next.textContent = '次へ';
     chips.innerHTML = (W.surl ? `<button type="button" data-ans="__surl">${esc(hostOf(W.surl))}</button>` : '') + '<button type="button" class="skip" data-ans="">なし</button>';
