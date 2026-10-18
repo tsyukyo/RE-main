@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
@@ -20,6 +20,9 @@
   --fill: rgba(118,118,128,.12); --blue: #007aff; --red: #ff3b30; --orange: #ff9500; --green: #34c759;
   --purple: #af52de; --gray: #8e8e93; --teal: #30b0c7; --indigo: #5856d6; --bar: rgba(249,249,249,.94);
   --shadow: 0 10px 30px rgba(0,0,0,.18);
+  /* 動きのトークン（ui-ux-pro-max: motion-consistency）。押下は速く、戻りと入場はばね、退場は短く */
+  --ease-out: cubic-bezier(.22,1,.36,1); --ease-in: cubic-bezier(.4,0,1,1); --spring: cubic-bezier(.34,1.45,.64,1);
+  --ease-sheet: cubic-bezier(.32,.72,0,1); --t-press: 80ms; --t-exit: 220ms;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -33,12 +36,14 @@
   --purple: #bf5af2; --gray: #98989d; --teal: #40c8e0; --indigo: #5e5ce6; --bar: rgba(22,22,24,.94);
   --shadow: 0 10px 30px rgba(0,0,0,.6); color-scheme: dark; }
 html, body { height: 100%; }
+/* ダブルタップでの拡大と、文字サイズの自動調整を止める（入力時のズームは viewport と 16px 以上の文字で防ぐ） */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
 [hidden] { display: none !important; }
-body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 17px; -webkit-tap-highlight-color: transparent; overflow: hidden; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 17px; -webkit-tap-highlight-color: transparent; overflow: hidden; overscroll-behavior: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { background: none; border: 0; padding: 0; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
-.app { max-width: 520px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; position: relative; background: var(--bg); }
+.app { max-width: 520px; margin: 0 auto; height: var(--vvh, 100%); display: flex; flex-direction: column; position: relative; background: var(--bg); }
 .gut { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
 /* ナビゲーションバー */
@@ -48,7 +53,7 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .navbtn svg { width: 22px; height: 22px; }
 .nav-title { font-weight: 600; opacity: 0; transition: opacity .2s; }
 .nav-title.show { opacity: 1; }
-.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-block: 0 24px; }
+.scroll { flex: 1; overflow-y: auto; background: var(--bg); view-transition-name: page; -webkit-overflow-scrolling: touch; padding-block: 0 24px; }
 .large { font-size: 34px; font-weight: 700; letter-spacing: .01em; margin: 2px 0 12px; text-wrap: balance; }
 
 /* 検索 */
@@ -105,11 +110,11 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 /* 入力バー（リマインくん式） */
 .composer { background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-top: .5px solid var(--sep); padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
 .qform { display: flex; gap: 8px; align-items: center; }
-.qform input { flex: 1; min-width: 0; height: 40px; border-radius: 20px; border: .5px solid var(--sep); background: var(--card); padding: 0 16px; font-size: 16px; outline: none; }
-.qform input:focus { border-color: var(--blue); }
-.send { width: 40px; height: 40px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; flex: none; }
-.send:disabled { background: var(--fg3); }
-.send svg { width: 20px; height: 20px; }
+.qform input { flex: 1; min-width: 0; height: 50px; border-radius: 25px; border: .5px solid var(--sep); background: var(--card); padding: 0 18px; font-size: 17px; outline: none; transition: border-color .2s, box-shadow .25s var(--ease-out); }
+.qform input:focus, .urlrow input:focus, .chat-in input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 18%, transparent); }
+.send { width: 46px; height: 46px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; flex: none; box-shadow: 0 4px 14px color-mix(in srgb, var(--blue) 40%, transparent); }
+.send:disabled { background: var(--fg3); box-shadow: none; transform: scale(.86); }
+.send svg { width: 22px; height: 22px; }
 .preview { background: var(--card); border-radius: 14px; padding: 10px 12px; display: grid; gap: 6px; box-shadow: 0 1px 0 var(--sep); }
 .pv-title { font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -120,12 +125,11 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .pv-note { font-size: 12px; color: var(--fg2); }
 .pv-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--fg2); }
 .pv-ask button { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; }
-.linkbtn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); flex: none; }
+.linkbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); flex: none; }
 .linkbtn[aria-pressed="true"], .linkbtn.has { color: var(--blue); }
 .linkbtn svg { width: 22px; height: 22px; }
 .urlrow { display: flex; gap: 8px; align-items: center; }
-.urlrow input { flex: 1; min-width: 0; height: 36px; border-radius: 10px; border: .5px solid var(--sep); background: var(--card); padding: 0 12px; font-size: 15px; outline: none; }
-.urlrow input:focus { border-color: var(--blue); }
+.urlrow input { flex: 1; min-width: 0; height: 44px; border-radius: 12px; border: .5px solid var(--sep); background: var(--card); padding: 0 14px; font-size: 16px; outline: none; transition: border-color .2s, box-shadow .2s; }
 .urlrow .lab { font-size: 13px; color: var(--fg2); white-space: nowrap; }
 .chip.u { background: color-mix(in srgb, var(--teal) 16%, transparent); color: var(--teal); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rlink { display: inline-flex; align-items: center; gap: 3px; color: var(--blue); text-decoration: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -141,16 +145,16 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .bub.me { align-self: flex-end; }
 .bub.me .tx { background: var(--blue); color: #fff; border-bottom-right-radius: 6px; }
 .bub .sub { display: block; font-size: 13px; color: var(--fg2); margin-top: 3px; }
-.bub.pop { animation: pop .22s ease-out; }
-@keyframes pop { from { transform: translateY(6px); opacity: .3; } }
+.bub.pop { animation: pop .5s var(--spring) both; transform-origin: bottom left; }
+.bub.me.pop { transform-origin: bottom right; }
+@keyframes pop { from { transform: translateY(10px) scale(.9); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bub.pop { animation: none; } }
 .chat-in { border-top: .5px solid var(--sep); background: var(--bar); padding-block: 8px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
 .chat-in .chips button { font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); color: var(--blue); font-weight: 600; }
 .chat-in .chips button.skip { color: var(--fg); }
 .chat-in form { display: flex; gap: 8px; }
-.chat-in input { flex: 1; min-width: 0; height: 40px; border-radius: 20px; border: .5px solid var(--sep); background: var(--card); padding: 0 16px; font-size: 16px; outline: none; }
-.chat-in input:focus { border-color: var(--blue); }
-.chat-in .next { height: 40px; padding: 0 16px; border-radius: 20px; background: var(--blue); color: #fff; font-weight: 600; flex: none; }
+.chat-in input { flex: 1; min-width: 0; height: 50px; border-radius: 25px; border: .5px solid var(--sep); background: var(--card); padding: 0 18px; font-size: 17px; outline: none; transition: border-color .2s, box-shadow .25s var(--ease-out); }
+.chat-in .next { height: 50px; padding: 0 20px; border-radius: 25px; background: var(--blue); color: #fff; font-weight: 600; flex: none; }
 .steps { display: flex; gap: 4px; justify-content: center; padding-top: 2px; }
 .steps i { width: 18px; height: 4px; border-radius: 2px; background: var(--fill); }
 .steps i.on { background: var(--blue); }
@@ -173,13 +177,13 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .gstep .tm { font-size: 14px; color: var(--blue); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .gstep .rm { width: 28px; height: 28px; border-radius: 50%; color: var(--red); display: grid; place-items: center; font-size: 20px; line-height: 1; }
 .gstep .sub { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; color: var(--fg2); }
-.gstep .sub input[type=number] { width: 64px; text-align: right; border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 15px; }
-.gstep .sub select { border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 15px; }
-.gstep .sub input[type=url] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 14px; color: var(--blue); }
+.gstep .sub input[type=number] { width: 64px; text-align: right; border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 16px; }
+.gstep .sub select { border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 16px; }
+.gstep .sub input[type=url] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 16px; color: var(--blue); }
 .gstep.done input[type=text] { text-decoration: line-through; color: var(--fg2); }
 .gsum { font-size: 13px; color: var(--fg2); margin: 6px 16px 0; font-variant-numeric: tabular-nums; }
 .inl { display: flex; gap: 8px; align-items: center; padding: 8px 16px; }
-.inl input[type=text] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 8px 10px; font-size: 15px; }
+.inl input[type=text] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 8px 10px; font-size: 16px; }
 .inl button { color: var(--blue); font-weight: 600; white-space: nowrap; }
 .toast .undo { color: var(--blue); font-weight: 700; margin-left: 10px; filter: brightness(1.4); }
 .f input[type=url] { width: 100%; border: 0; background: transparent; outline: none; padding: 12px 0; font-size: 16px; color: var(--blue); }
@@ -188,11 +192,19 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .ex { white-space: nowrap; font-size: 13px; padding: 6px 11px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); }
 
 /* シート */
-.sheet-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
-.sheet { background: var(--bg); width: 100%; max-width: 520px; max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); border-radius: 14px 14px 0 0; display: flex; flex-direction: column; animation: up .28s cubic-bezier(.2,.8,.2,1); }
+.sheet-wrap { position: fixed; left: 0; right: 0; top: 0; height: var(--vvh, 100%); background: rgba(0,0,0,.35); z-index: 40; display: flex; align-items: flex-end; justify-content: center; animation: scrimIn .35s var(--ease-out); }
+.sheet { background: var(--bg); width: 100%; max-width: 520px; max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; position: relative; animation: up .52s var(--ease-sheet); box-shadow: 0 -8px 30px rgba(0,0,0,.12); }
+.sheet::before { content: ""; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--fg3); opacity: .7; z-index: 1; }
+.sheet.dragging { animation: none; transition: none; }
+.sheet.settle { transition: transform .45s var(--spring); }
+.sheet-wrap.closing { pointer-events: none; animation: scrimOut var(--t-exit) var(--ease-in) forwards; }
+.sheet-wrap.closing .sheet { animation: down var(--t-exit) var(--ease-in) forwards; }
 @keyframes up { from { transform: translateY(100%); } }
+@keyframes down { to { transform: translateY(100%); } }
+@keyframes scrimIn { from { background-color: transparent; } }
+@keyframes scrimOut { to { background-color: transparent; } }
 @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
-.sheet-h { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 52px; border-bottom: .5px solid var(--sep); }
+.sheet-h { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 56px; padding-top: 6px; border-bottom: .5px solid var(--sep); touch-action: none; }
 .sheet-h .t { font-weight: 600; }
 .sheet-h .r { justify-self: end; font-weight: 600; }
 .sheet-b { overflow-y: auto; padding-block: 16px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 22px; }
@@ -203,7 +215,7 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .f + .f::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
 .f > label, .f > .lab { flex: 1; min-width: 0; }
 .f input[type=text], .f textarea { width: 100%; border: 0; background: transparent; outline: none; padding: 12px 0; font-size: 17px; }
-.f textarea { resize: none; min-height: 64px; font-size: 15px; }
+.f textarea { resize: none; min-height: 64px; font-size: 16px; }
 .f input[type=date], .f input[type=time], .f input[type=datetime-local], .f input[type=number], .f select {
   border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 16px; color: var(--fg); max-width: 60%; }
 .f input[type=number] { width: 70px; text-align: right; }
@@ -223,7 +235,7 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .colors { display: flex; gap: 10px; padding: 12px 16px; flex-wrap: wrap; }
 .colors button { width: 32px; height: 32px; border-radius: 50%; background: var(--c); }
 .colors button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--fg3); }
-.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; width: 100%; min-height: 160px; border: 0; background: transparent; padding: 12px 16px; resize: vertical; color: var(--fg); outline: none; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 16px; width: 100%; min-height: 160px; border: 0; background: transparent; padding: 12px 16px; resize: vertical; color: var(--fg); outline: none; }
 .msg { font-size: 13px; padding: 0 16px 12px; }
 .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
 .seg { display: flex; background: var(--fill); border-radius: 9px; padding: 2px; margin: 10px 16px; }
@@ -240,7 +252,7 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 
 /* 通知バナー・トースト */
 .banner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); width: calc(100% - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 500px; z-index: 60;
-  background: color-mix(in srgb, var(--card) 90%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; animation: drop .3s ease-out; }
+  background: color-mix(in srgb, var(--card) 90%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; animation: drop .55s var(--spring); }
 @keyframes drop { from { transform: translate(-50%, -120%); } }
 .bn-top { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg2); }
 .bn-top .appic { width: 20px; height: 20px; border-radius: 5px; background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
@@ -251,10 +263,59 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 .bn-acts button { flex: 1; min-width: 70px; background: var(--fill); border-radius: 10px; padding: 8px 6px; font-size: 14px; font-weight: 600; }
 .bn-acts button.pri, .bn-acts a.pri { background: var(--blue); color: #fff; }
 .bn-acts a.btnlike { flex: 1; min-width: 70px; border-radius: 10px; padding: 8px 6px; font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; }
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(130px + env(safe-area-inset-bottom, 0px)); z-index: 55; width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 440px; box-sizing: border-box;
-  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--composer-h, 130px) + 10px); z-index: 55; width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 440px; box-sizing: border-box;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); animation: toastIn .5s var(--spring); }
+.toast.out { animation: toastOut var(--t-exit) var(--ease-in) forwards; }
+@keyframes toastIn { from { transform: translate(-50%, 24px) scale(.94); opacity: 0; } }
+@keyframes toastOut { to { transform: translate(-50%, 12px) scale(.98); opacity: 0; } }
 .bot { display: flex; gap: 8px; align-items: flex-start; }
 .bot b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; font-size: 11px; display: grid; place-items: center; margin-top: 1px; }
+
+/* 押した感触（ui-ux-pro-max: press-feedback / scale-feedback / spring-physics）
+   押した瞬間に 80ms で縮み、離すとばねで戻る。レイアウトは動かさない */
+.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code {
+  transition: transform .5s var(--spring), background-color .2s var(--ease-out), color .2s, box-shadow .25s var(--ease-out), opacity .2s; }
+:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .pv-ask button, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code):active:not(:disabled) { transform: scale(.92); transition-duration: var(--t-press); }
+.tile:active { transform: scale(.96); transition-duration: var(--t-press); }
+.send:active:not(:disabled) { transform: scale(.86); }
+.navbtn { transition: opacity .25s var(--ease-out); }
+.navbtn:active { opacity: .4; transition-duration: var(--t-press); }
+.lrow, .btn { transition: background-color .3s var(--ease-out); }
+.lrow:active, .btn:active { background-color: var(--fill); transition-duration: 0s; }
+.row-main { transition: opacity .3s var(--ease-out); }
+.row-main:active { opacity: .55; transition-duration: var(--t-press); }
+.check { transition: background .15s, border-color .15s, transform .5s var(--spring); }
+.check:active { transform: scale(.85); transition-duration: var(--t-press); }
+.check.on { animation: checkPop .55s var(--spring); }
+@keyframes checkPop {
+  0% { transform: scale(.8); box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 45%, transparent); }
+  45% { transform: scale(1.18); }
+  100% { transform: scale(1); box-shadow: 0 0 0 12px transparent; } }
+.row.leaving { animation: rowOut .28s var(--ease-in) forwards; pointer-events: none; }
+@keyframes rowOut { to { opacity: 0; transform: translateX(28px); } }
+.row.flash { animation: rowFlash 1.4s var(--ease-out); border-radius: 10px; }
+@keyframes rowFlash { 0%, 30% { background: color-mix(in srgb, var(--blue) 14%, transparent); } 100% { background: transparent; } }
+.switch::after { transition: transform .4s var(--spring), width .2s; }
+.switch:active::after { width: 33px; }
+.switch:checked:active::after { transform: translateX(14px); }
+
+/* 画面遷移: 右から重なって入り、戻るときは右へ抜ける（ui-ux-pro-max: continuity / hierarchy-motion） */
+::view-transition-old(page), ::view-transition-new(page) { animation-duration: .46s; animation-timing-function: var(--ease-sheet); }
+:root[data-nav="fwd"]::view-transition-old(page) { animation-name: pageOutL; }
+:root[data-nav="fwd"]::view-transition-new(page) { animation-name: pageInR; box-shadow: -10px 0 30px rgba(0,0,0,.12); }
+:root[data-nav="back"]::view-transition-old(page) { animation-name: pageOutR; z-index: 1; box-shadow: -10px 0 30px rgba(0,0,0,.12); }
+:root[data-nav="back"]::view-transition-new(page) { animation-name: pageInL; }
+@keyframes pageInR { from { transform: translateX(100%); } }
+@keyframes pageOutL { to { transform: translateX(-28%); opacity: .5; } }
+@keyframes pageInL { from { transform: translateX(-28%); opacity: .5; } }
+@keyframes pageOutR { to { transform: translateX(100%); } }
+
+/* キーボード表示中は下の余白（ホームバー分）を詰める */
+:root.kb .composer, :root.kb .chat-in { padding-bottom: 8px; }
+:root.kb .sheet-b { padding-bottom: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 </style>
 
 <div class="app" id="app">
@@ -274,7 +335,7 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
     <div class="urlrow" id="urlRow" hidden><span class="lab">通知から開く</span><input id="quickUrl" type="url" inputmode="url" placeholder="https://…（任意）" aria-label="通知をタップしたときに開くURL"></div>
     <form class="qform" id="qform" autocomplete="off" novalidate>
       <button type="button" class="linkbtn" id="linkBtn" aria-pressed="false" aria-label="URLを付ける"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg></button>
-      <input id="quick" type="text" enterkeyhint="send" placeholder="何をリマインドしますか？（例: 明日9時に資料送る）" aria-label="話し言葉でリマインダーを追加">
+      <input id="quick" type="text" enterkeyhint="send" placeholder="例: 明日9時に資料送る" aria-label="話し言葉でリマインダーを追加">
       <button class="send" id="sendBtn" type="submit" aria-label="追加" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
     </form>
   </div>
@@ -405,6 +466,68 @@ function render() {
     sc.onscroll = () => nt.classList.toggle('show', sc.scrollTop > 40);
   }
 }
+// 画面遷移。View Transitions があれば iOS のように重ねてスライドし、なければ新しい画面だけ滑り込ませる
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+let homeScroll = 0;
+function navigate(v, dir, opts = {}) {
+  const sc = $('#scroll');
+  if (dir === 'fwd' && view.name === 'home') homeScroll = sc.scrollTop;
+  const swap = () => { view = v; render(); sc.scrollTop = dir === 'back' ? homeScroll : 0; };
+  if (reduceMotion()) return swap();
+  if (document.startViewTransition && !opts.noVT) {
+    const root = document.documentElement;
+    root.dataset.nav = dir;
+    const t = document.startViewTransition(swap);
+    t.finished.finally(() => { if (root.dataset.nav === dir) delete root.dataset.nav; });
+    return;
+  }
+  swap();
+  sc.animate(dir === 'back' ? [{ transform: 'translateX(-28%)', opacity: .5 }, { transform: 'none', opacity: 1 }] : [{ transform: 'translateX(40%)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+    { duration: 420, easing: 'cubic-bezier(.32,.72,0,1)' });
+}
+// 左端からのスワイプで戻る（指に追従し、離した位置と速さで戻るか決める）
+(() => {
+  const sc = $('#scroll'); let sw = null;
+  sc.addEventListener('touchstart', e => {
+    if (view.name === 'home' || e.touches.length > 1) return;
+    const t = e.touches[0]; if (t.clientX - sc.getBoundingClientRect().left > 28) return;
+    sw = { x: t.clientX, y: t.clientY, t: performance.now(), dx: 0, on: false };
+  }, { passive: true });
+  sc.addEventListener('touchmove', e => {
+    if (!sw) return;
+    const t = e.touches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y;
+    if (!sw.on) { if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) { sw = null; return; } if (dx > 8) sw.on = true; else return; }
+    sw.dx = Math.max(0, dx);
+    sc.style.transition = 'none'; sc.style.transform = `translateX(${sw.dx}px)`;
+  }, { passive: true });
+  const end = () => {
+    if (!sw) return; const s = sw; sw = null; if (!s.on) return;
+    const v = s.dx / Math.max(1, performance.now() - s.t);
+    if (s.dx > sc.clientWidth * .35 || v > .5) {
+      sc.style.transition = 'transform .2s cubic-bezier(.4,0,1,1)'; sc.style.transform = 'translateX(100%)';
+      setTimeout(() => { sc.style.transition = ''; sc.style.transform = ''; navigate({ name: 'home' }, 'back', { noVT: true }); }, 190);
+    } else {
+      sc.style.transition = 'transform .45s cubic-bezier(.34,1.45,.64,1)'; sc.style.transform = '';
+      setTimeout(() => { sc.style.transition = ''; }, 460);
+    }
+  };
+  sc.addEventListener('touchend', end); sc.addEventListener('touchcancel', end);
+})();
+// 触覚フィードバック。Android は vibrate、iOS 18 以降の Safari はスイッチ型チェックボックスの切り替えで軽く震える
+function haptic() {
+  try { if (navigator.vibrate) { navigator.vibrate(10); return; } } catch (e) {}
+  try {
+    const l = document.createElement('label'), i = document.createElement('input');
+    i.type = 'checkbox'; i.setAttribute('switch', ''); i.tabIndex = -1;
+    l.setAttribute('aria-hidden', 'true'); l.style.cssText = 'position:fixed;left:-200px;top:0;opacity:0;pointer-events:none';
+    l.appendChild(i); document.body.appendChild(l); l.click(); l.remove();
+  } catch (e) {}
+}
+// 登録した行を一瞬光らせて、どこに入ったか分かるようにする
+function celebrate(id) {
+  haptic();
+  requestAnimationFrame(() => { const el = document.querySelector(`.row[data-id="${id}"]`); if (el) { el.classList.add('flash'); el.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); } });
+}
 function renderHome() {
   const keys = ['today', 'scheduled', 'all', 'flagged', 'repeat', 'completed'];
   const tiles = keys.map(k => { const m = SMART[k];
@@ -521,17 +644,19 @@ function snooze(r, mins) {
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-smart],[data-list],[data-check],[data-open],#backBtn,#addListBtn,#editListBtn,#helpBtn,#dataBtn,.ex');
   if (!t) return;
-  if (t.dataset.smart) { view = { name: 'list', smart: t.dataset.smart }; render(); $('#scroll').scrollTop = 0; }
-  else if (t.dataset.list) { view = { name: 'list', list: t.dataset.list }; render(); $('#scroll').scrollTop = 0; }
+  if (t.dataset.smart) navigate({ name: 'list', smart: t.dataset.smart }, 'fwd');
+  else if (t.dataset.list) navigate({ name: 'list', list: t.dataset.list }, 'fwd');
   else if (t.dataset.check) {
     const r = S.reminders.find(x => x.id === t.dataset.check); if (!r) return;
     if (r.done) { r.done = false; r.doneAt = null; if (isGroup(r)) r.steps.forEach(x => { x.done = false; x.lastNotified = null; }); save(); render(); return; }
-    t.classList.add('on');
+    t.classList.add('on'); haptic();
+    // 完了で一覧から消えるものは、チェックの後に右へ抜けていく
+    if (!isGroup(r) && !r.rule && !reduceMotion()) { const row = t.closest('.row'); setTimeout(() => row && row.classList.add('leaving'), 100); }
     if (isGroup(r)) { setTimeout(() => { const nx = nextStep(r); if (nx) toast(esc(completeStep(r, nx.i))); render(); }, 380); return; }
     setTimeout(() => { const msg = completeRem(r); toast(`「${esc(r.title)}」${msg}`); render(); }, 380);
   }
   else if (t.dataset.open) { const r = S.reminders.find(x => x.id === t.dataset.open); if (r && isGroup(r)) openGroupEditor(r.id); else openDetail(t.dataset.open); }
-  else if (t.id === 'backBtn') { view = { name: 'home' }; render(); }
+  else if (t.id === 'backBtn') navigate({ name: 'home' }, 'back');
   else if (t.id === 'addListBtn') openListEditor(null);
   else if (t.id === 'editListBtn') openListEditor(view.list);
   else if (t.id === 'helpBtn') openHelp();
@@ -604,6 +729,7 @@ $('#qform').addEventListener('submit', e => {
 const quickMode = () => !!(S.settings && S.settings.quickAdd);
 function updateModeLbl() { $('#modeLbl').textContent = quickMode() ? 'すぐ登録モード' : ''; }
 function registeredToast(r) {
+  celebrate(r.id);
   const when = r.due ? `次回は ${fmtDue(parseLocal(r.due))} です${r.rule ? `（↻ ${describeRule(r.rule)}）` : ''}` : '日時なしで追加しました';
   toast(`<div class="bot"><b>り</b><div>「${esc(r.title)}」を登録しました。${esc(when)}${r.nag ? `。完了するまで${r.nag.every}分ごとに再通知します` : ''}${r.url ? `。通知をタップすると ${esc(hostOf(r.url))} を開きます` : ''}<button class="undo" data-undo="${r.id}">取り消す</button></div></div>`, 5000);
 }
@@ -745,18 +871,71 @@ $('#toast').addEventListener('click', e => {
   S.reminders = S.reminders.filter(x => x.id !== b.dataset.undo); save(); render(); toast('取り消しました');
 });
 function toast(html, ms = 2600) {
-  const t = $('#toast'); t.innerHTML = html; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  const t = $('#toast'); t.innerHTML = html;
+  if (t.hidden || t.classList.contains('out')) { t.classList.remove('out'); t.hidden = false; t.style.animation = 'none'; t.offsetHeight; t.style.animation = ''; }
+  else if (!reduceMotion()) t.animate([{ transform: 'translateX(-50%) scale(.96)' }, { transform: 'translateX(-50%) scale(1)' }], { duration: 400, easing: 'cubic-bezier(.34,1.45,.64,1)' });
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.add('out'); toastTimer = setTimeout(() => { t.hidden = true; t.classList.remove('out'); }, 220); }, ms);
 }
 
 // ---- シート共通 ----
+// 開くときは下からばねで、閉じるときは短く落とす。閉じる途中で別のシートを開いたら、閉じる処理は取り消す
+let sheetCloseT = null;
 function openSheet(html, onMount) {
   const w = $('#sheetWrap'), s = $('#sheet');
+  if (sheetCloseT) { clearTimeout(sheetCloseT); sheetCloseT = null; w.classList.remove('closing'); s.classList.remove('tall'); s.style.transform = ''; s.style.animation = 'none'; s.offsetHeight; s.style.animation = ''; }
   s.innerHTML = html; w.hidden = false;
   w.onclick = e => { if (e.target === w) closeSheet(); };
   onMount && onMount(s);
 }
-function closeSheet() { $('#sheetWrap').hidden = true; $('#sheet').innerHTML = ''; $('#sheet').classList.remove('tall'); }
+function closeSheet() {
+  const w = $('#sheetWrap'), s = $('#sheet');
+  const done = () => { sheetCloseT = null; w.hidden = true; w.classList.remove('closing'); s.innerHTML = ''; s.classList.remove('tall', 'dragging', 'settle'); s.style.transform = ''; };
+  if (w.hidden || sheetCloseT) return;
+  if (reduceMotion()) return done();
+  s.classList.remove('dragging', 'settle');
+  w.classList.add('closing');
+  sheetCloseT = setTimeout(done, 220);
+}
+// シートの上端（タイトル部分）を下に引くと閉じる
+(() => {
+  const s = $('#sheet'); let d = null;
+  s.addEventListener('touchstart', e => {
+    const h = e.target.closest('.sheet-h'); if (!h || e.target.closest('button,input,select,textarea,a')) return;
+    d = { y: e.touches[0].clientY, t: performance.now(), dy: 0 };
+  }, { passive: true });
+  s.addEventListener('touchmove', e => {
+    if (!d) return;
+    const dy = e.touches[0].clientY - d.y;
+    d.dy = dy > 0 ? dy : dy / 4; // 上に引いたときは少しだけ抵抗をつけて動かす
+    s.classList.add('dragging'); s.classList.remove('settle'); s.style.transform = `translateY(${d.dy}px)`;
+  }, { passive: true });
+  const end = () => {
+    if (!d) return; const g = d; d = null;
+    s.classList.remove('dragging');
+    const v = g.dy / Math.max(1, performance.now() - g.t);
+    if (g.dy > 120 || (g.dy > 30 && v > .6)) closeSheet();
+    else { s.classList.add('settle'); s.style.transform = ''; setTimeout(() => s.classList.remove('settle'), 460); }
+  };
+  s.addEventListener('touchend', end); s.addEventListener('touchcancel', end);
+})();
+// キーボードが出ている間は、見えている高さにアプリとシートを合わせる（iOS は画面ごと押し上げて送信ボタンが隠れるため）
+(() => {
+  const vv = window.visualViewport; if (!vv) return;
+  const root = document.documentElement;
+  const fit = () => {
+    const kb = window.innerHeight - vv.height > 120;
+    root.classList.toggle('kb', kb);
+    if (kb) root.style.setProperty('--vvh', vv.height + 'px'); else root.style.removeProperty('--vvh');
+    if (kb && (window.scrollY || vv.offsetTop)) window.scrollTo(0, 0);
+  };
+  vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit);
+  // トーストは入力バーのすぐ上に出す（入力バーの高さはプレビューやキーボードで変わる）
+  const comp = document.querySelector('.composer');
+  if (window.ResizeObserver && comp) new ResizeObserver(() => root.style.setProperty('--composer-h', comp.offsetHeight + 'px')).observe(comp);
+  // iOS では :active を効かせるのにタッチのリスナーが要る
+  document.addEventListener('touchstart', () => {}, { passive: true });
+})();
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheetWrap').hidden) closeSheet(); });
 const sheetHead = (title, right = '完了', left = 'キャンセル') => `<div class="sheet-h gut">${left ? `<button class="navbtn" data-act="cancel">${left}</button>` : '<span></span>'}<div class="t">${title}</div>${right ? `<button class="navbtn r" data-act="ok">${right}</button>` : '<span></span>'}</div>`;
 
@@ -1058,7 +1237,7 @@ function openGroupEditor(id, opts = {}) {
       if (!G.title.trim()) G.title = `${G.steps[0].title} ほか${G.steps.length - 1}件`;
       // 時刻を変えた項目は通知し直す
       G.steps.forEach(st => { st.lastNotified = null; });
-      if (isNew) { S.reminders.push(G); save(); closeSheet(); render(); const ts = stepTimes(G); toast(`<div class="bot"><b>り</b><div>グループ「${esc(G.title)}」を登録しました。${esc(fmtDue(ts[0]))} から ${G.steps.length}件を順番に通知します<button class="undo" data-undo="${G.id}">取り消す</button></div></div>`, 5000); return; }
+      if (isNew) { S.reminders.push(G); save(); closeSheet(); render(); celebrate(G.id); const ts = stepTimes(G); toast(`<div class="bot"><b>り</b><div>グループ「${esc(G.title)}」を登録しました。${esc(fmtDue(ts[0]))} から ${G.steps.length}件を順番に通知します<button class="undo" data-undo="${G.id}">取り消す</button></div></div>`, 5000); return; }
       const ix = S.reminders.findIndex(x => x.id === G.id); if (ix >= 0) { G.done = G.steps.every(x => x.done); S.reminders[ix] = G; }
       save(); closeSheet(); render(); toast('保存しました');
     };
