@@ -342,6 +342,7 @@ function parseInput(raw, now = new Date()) {
   }
   // 8) 時刻（複数可）
   const times = [];
+  let vague = false; // 「今夜」「朝」「寝る前」など、時刻をこちらで補ったとき
   const tre = /(午前|午後|朝|昼|夕方|夕|夜|晩|深夜|AM|PM|am|pm)?\s*(\d{1,2})\s*(?::\s*(\d{2})|時\s*(?:(\d{1,2})\s*分|(半))?)/;
   if (!relDue) {
     let m;
@@ -357,9 +358,9 @@ function parseInput(raw, now = new Date()) {
     }
     take(/正午/, () => times.push('12:00'));
     const CASUAL = [[/寝る前/, '22:00'], [/起きたら|起床後?/, '07:00'], [/朝イチ|朝一/, '09:00'], [/昼過ぎ/, '13:00'], [/お昼|昼休み/, '12:00'], [/おやつ/, '15:00'], [/仕事終わり|仕事後|定時後?|退勤後?|帰り/, '18:00']];
-    if (!times.length) for (const [re, t] of CASUAL) if (take(new RegExp('(?:' + re.source + ')(?=に|の時間|で|\\s|$)'), () => times.push(t))) break;
+    if (!times.length) for (const [re, t] of CASUAL) if (take(new RegExp('(?:' + re.source + ')(?=に|の時間|で|\\s|$)'), () => { times.push(t); vague = true; })) break;
     if (!times.length) take(/(朝|昼|夕方|夜|晩)(?=に|の|\s|$)/, m => { period = m[1]; });
-    if (!times.length && period) times.push({ 朝: '08:00', 昼: '12:00', 夕方: '17:00', 夜: '20:00', 晩: '20:00' }[period]);
+    if (!times.length && period) { times.push({ 朝: '08:00', 昼: '12:00', 夕方: '17:00', 夜: '20:00', 晩: '20:00' }[period]); vague = true; }
   }
   const uniqTimes = [...new Set(times)].sort();
 
@@ -402,7 +403,12 @@ function parseInput(raw, now = new Date()) {
     const d = date || dayStart(now);
     const [h, mi] = (uniqTimes[0] || '09:00').split(':').map(Number);
     due = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi);
-    if (!date && due <= now) { due = addDays(due, 1); notes.push('この時刻は過ぎているので明日にしました'); }
+    const nextHour = () => { const d2 = new Date(now); d2.setMinutes(0, 0, 0); d2.setHours(d2.getHours() + 1); return d2; };
+    // 「今夜」「今日の夕方」のように時刻を補った場合、その時刻が過ぎていれば、過去にせず次の正時にする
+    // （夕方以降に「夜」「寝る前」のように日付なしで書いたときも、今夜のこととみなす）
+    if (vague && due <= now && ((date && +date === +dayStart(now)) || (!date && +uniqTimes[0].slice(0, 2) >= 17 && now.getHours() >= 17))) {
+      const was = uniqTimes[0].replace(/^0/, ''); due = nextHour(); notes.push(`${was} は過ぎているので ${due.getHours()}:00 にしました`);
+    } else if (!date && due <= now) { due = addDays(due, 1); notes.push('この時刻は過ぎているので明日にしました'); }
     else if (date && !uniqTimes.length) {
       if (due <= now) { due = new Date(now); due.setMinutes(0, 0, 0); due.setHours(due.getHours() + 1); notes.push(`9:00 は過ぎているので ${due.getHours()}:00 にしました`); }
       else notes.push('時刻の指定がないので 9:00 にしました');

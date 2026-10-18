@@ -900,7 +900,7 @@ function updatePreview() {
   const ask = !p.due ? `<div class="pv-ask">いつ通知する？${QUICK_WHEN.map(([l, t]) => `<button type="button" data-append="${esc(t)}">${esc(l)}</button>`).join('')}</div>` : '';
   pv.innerHTML = `<div class="pv-title">${esc(p.title)}</div><div class="chips">${interpretation(p, url)}</div>${ask}${p.notes.length ? `<div class="pv-note">${esc(p.notes.filter(n => n !== '相対時刻').join(' / '))}</div>` : ''}`;
 }
-const QUICK_WHEN = [['30分後', '30分後'], ['1時間後', '1時間後'], ['今夜', '今夜20時'], ['明日の朝', '明日 朝8時'], ['週末', '週末 10時']];
+const QUICK_WHEN = [['30分後', '30分後'], ['1時間後', '1時間後'], ['今夜', '今夜'], ['明日の朝', '明日 朝8時'], ['週末', '週末 10時']];
 $('#preview').addEventListener('click', e => {
   const b = e.target.closest('[data-append]'); if (!b) return;
   const q = $('#quick'); q.value = b.dataset.append + ' ' + q.value.trim(); updatePreview(); q.focus();
@@ -1025,6 +1025,7 @@ function wizardAnswer(raw, label) {
     wizardMe(label || v); W.inputs.push(v);
     const p = parseInput(v, now);
     if (!p.due) { wizardBot('ごめんなさい、日時が読み取れませんでした。', '「明日 9時」「来週金曜 15時」「毎月25日」のように書いてみてください'); return wizardPrompt(); }
+    if (p.due < now) { wizardBot(`${fmtDue(p.due)} はもう過ぎています。`, '「明日」を付けるか、これからの時刻を入力してください'); return wizardPrompt(); }
     W.due = p.due; W.rule = p.rule; if (p.nag) W.nag = p.nag; if (p.url && !W.surl) W.surl = normUrl(p.url);
     wizardBot(`${whenText(p.due, p.rule)} ですね。`, p.notes.filter(n => n !== '相対時刻').join(' / ') || null);
     return askUrl();
