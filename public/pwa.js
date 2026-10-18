@@ -116,13 +116,13 @@
       let body, foot;
       if (!canPush && isIOS && !standalone) {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">ホーム画面から開くと使えます</span></div>`;
-        foot = 'Safari の共有ボタン →「ホーム画面に追加」で追加し、ホーム画面のりまいんから開いてください（iOS 16.4 以降）。';
+        foot = 'Safari の共有ボタン →「ホーム画面に追加」で追加し、ホーム画面のRE:mainから開いてください（iOS 16.4 以降）。';
       } else if (!canPush) {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">この環境では使えません</span></div>`;
         foot = 'アプリを開いている間は、画面上部のバナーでお知らせします。';
       } else if (perm === 'denied') {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">拒否されています</span></div>`;
-        foot = isIOS ? '設定アプリ →「通知」→「りまいん」で通知を許可してから、もう一度開いてください。' : 'ブラウザのサイト設定で通知を許可してください。';
+        foot = isIOS ? '設定アプリ →「通知」→「RE:main」で通知を許可してから、もう一度開いてください。' : 'ブラウザのサイト設定で通知を許可してください。';
       } else if (!s) {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">オフ</span></div><button class="btn" id="pOn">オンにする</button><div class="msg" id="pMsg"></div>`;
         foot = 'オンにすると、アプリを閉じていても時刻に通知が届きます。サーバーへ送るのは通知の時刻だけで、内容や URL は送りません。';
