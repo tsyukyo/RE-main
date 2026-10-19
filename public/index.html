@@ -450,6 +450,7 @@ html, :root.sheet-open body { background: #000; }
 <div class="toast" id="toast" hidden role="status"></div>
 <div class="sheet-wrap" id="sheetWrap" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 
+<script>window.RIMAIN_PWA = 1;</script>
 <script src="engine.js"></script>
 <script src="core.js"></script>
 <script>
@@ -494,6 +495,10 @@ function makeReminder(text, listId, extra = {}) {
   return { id: uid(), title: p.title, notes: '', url: normUrl(p.url), list: listId, due: p.due ? fmtLocal(p.due) : null, rule: p.rule, nag: p.nag,
     flagged: false, priority: 0, done: false, doneAt: null, count: 0, history: [], input: text, createdAt: fmtLocal(now), ...extra };
 }
+// 本番（ホーム画面のアプリ版）は空の状態から始める。サンプルは単体版と ?demo のときだけ
+const IS_PWA = !!window.RIMAIN_PWA;
+const wantsSample = () => !IS_PWA || /[?&]demo\b/.test(location.search);
+function emptyData() { return { format: FORMAT, version: FORMAT_VERSION, lists: [{ id: 'inbox', name: 'リマインダー', color: 'blue' }], reminders: [] }; }
 function sample() {
   const lists = [
     { id: 'inbox', name: 'リマインダー', color: 'blue' },
@@ -1731,8 +1736,8 @@ function openData() {
       <button class="btn" id="nAsk" ${perm === 'default' ? '' : 'hidden'}>通知を許可する</button>
     </div><div class="fgroup-f">このモックはアプリを開いている間、画面上部のバナーで通知します。閉じている間の通知（Web Push）はホーム画面に追加するアプリ版で使えます。</div></div>`}
     <div><div class="fgroup">
-      <button class="btn danger" id="rSample">サンプルデータに戻す</button>
-      <div id="rSampleC" hidden><div class="fgroup-f" style="margin:4px 16px 0">今のリマインダーはすべて消えます。先にエクスポートしておくと安全です。</div><button class="btn danger center" id="rSampleYes" style="font-weight:600">サンプルに戻す</button></div>
+      <button class="btn danger" id="rSample">${IS_PWA ? 'すべてのリマインダーを消去' : 'サンプルデータに戻す'}</button>
+      <div id="rSampleC" hidden><div class="fgroup-f" style="margin:4px 16px 0">今のリマインダーはすべて消えます。先にエクスポートしておくと安全です。</div><button class="btn danger center" id="rSampleYes" style="font-weight:600">${IS_PWA ? "消去する" : "サンプルに戻す"}</button></div>
     </div></div>
   </div>`;
   openSheet(html, sh => {
@@ -1778,7 +1783,7 @@ function openData() {
     g('sCopy').onchange = e => { S.settings = { ...(S.settings || {}), copyOnOpen: e.target.value }; save(); };
     g('sQuick').onchange = e => { S.settings = { ...(S.settings || {}), quickAdd: e.target.checked }; save(); updateModeLbl(); };
     g('rSample').onclick = () => { g('rSampleC').hidden = false; g('rSample').hidden = true; };
-    g('rSampleYes').onclick = () => { S = sample(); save(); closeSheet(); view = { name: 'home' }; render(); toast('サンプルに戻しました'); };
+    g('rSampleYes').onclick = () => { S = IS_PWA ? emptyData() : sample(); save(); closeSheet(); view = { name: 'home' }; render(); toast(IS_PWA ? 'すべて消去しました' : 'サンプルに戻しました'); };
   });
 }
 
@@ -1963,7 +1968,7 @@ function tick() {
 }
 
 // ---- 起動 ----
-S = load() || sample();
+S = load() || (wantsSample() ? sample() : emptyData());
 save();
 render();
 updatePreview();
