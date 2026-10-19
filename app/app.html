@@ -239,6 +239,24 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .f input[type=number] { width: 70px; text-align: right; }
 .f .val { color: var(--fg2); }
 .wd { display: flex; gap: 6px; padding: 10px 16px; flex-wrap: wrap; }
+.adv-h { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; font-weight: 600; }
+.adv .seg { margin: 8px 16px; }
+.cnd { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 16px; border-bottom: .5px solid var(--sep); }
+.cnd select, .cnd input { border: 0; background: var(--fill); border-radius: 8px; padding: 7px 10px; font-size: 16px; color: var(--fg); min-height: 36px; }
+.cnd input[type=number] { width: 64px; text-align: right; }
+.cnd .wd { padding: 2px 0; flex-basis: 100%; }
+.cnd .wd.mo button { width: 40px; border-radius: 10px; font-size: 14px; }
+.cnd .w { font-size: 15px; color: var(--fg2); }
+.cnd .x { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; background: var(--fill); color: var(--red); font-size: 20px; line-height: 1; }
+.grp { margin: 10px 12px; border: 1.5px dashed color-mix(in srgb, var(--blue) 45%, var(--sep)); border-radius: 14px; overflow: hidden; }
+.grp .grp-h { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; font-size: 13px; color: var(--fg2); }
+.grp .grp-h .seg { flex: 1; margin: 0; }
+.adv-add { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 12px; }
+.adv-add button { min-height: 38px; padding: 0 14px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; font-size: 15px; }
+.ifrow { border-bottom: .5px solid var(--sep); }
+.ifrow .cnd { border-bottom: 0; padding-bottom: 4px; }
+.ifrow .then { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 16px 10px; }
+.ifrow .then select, .ifrow .then input { border: 0; background: var(--fill); border-radius: 8px; padding: 7px 10px; font-size: 16px; color: var(--fg); min-height: 36px; }
 .wd button { width: 36px; height: 36px; border-radius: 50%; background: var(--fill); font-size: 15px; }
 .wd button[aria-pressed="true"] { background: var(--blue); color: #fff; }
 .switch { appearance: none; -webkit-appearance: none; width: 51px; height: 31px; border-radius: 16px; background: var(--fill); position: relative; transition: background .2s; flex: none; cursor: pointer; }
@@ -291,9 +309,9 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 
 /* 押した感触（ui-ux-pro-max: press-feedback / scale-feedback / spring-physics）
    押した瞬間に 80ms で縮み、離すとばねで戻る。レイアウトは動かさない */
-.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn {
+.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn {
   transition: transform .5s var(--spring), background-color .25s var(--ease-out), color .25s, box-shadow .25s var(--ease-out), opacity .3s var(--ease-out), filter .3s var(--ease-out); }
-:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .sw-btn).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
+:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
 .tile.is-pressed { transform: scale(.94); filter: grayscale(1); background-color: color-mix(in srgb, var(--card) 85%, var(--fg)); transition-duration: var(--t-press); }
 .tile .ic { transition: transform .55s var(--spring); }
 .tile.is-pressed .ic { transform: scale(1.15) rotate(-8deg); transition-duration: .15s; }
@@ -1178,6 +1196,75 @@ function ivOptions(kind, cur) {
   const ns = Array.from({ length: max }, (_, i) => i + 1); if (cur > max) ns.push(cur);
   return ns.map(n => `<option value="${n}" ${n === +cur ? 'selected' : ''}>${ivLabel(kind, n)}</option>`).join('');
 }
+// ---- 詳細条件の組み立て画面（AND / OR / もし〜なら） ----
+const COND_TYPES = [['day', '日の種類'], ['wd', '曜日'], ['mday', '日付の範囲'], ['last', '月末'], ['nth', '第N曜日'], ['month', '月'], ['parity', '偶数日・奇数日'], ['period', '期間']];
+const condDefault = t => ({ day: { v: 'bizday' }, wd: { v: [1] }, mday: { from: 1, to: 10 }, last: { n: 1 }, nth: { n: 1, wd: 1 }, month: { v: [new Date().getMonth() + 1] }, parity: { v: 'even' }, period: { from: ymd(new Date()), to: '' } }[t]);
+function condEditor(c, p) {
+  const o = (v, l, cur) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${l}</option>`;
+  const sel = (k, opts, cur) => `<select data-p="${p}" data-k="${k}">${opts.map(([v, l]) => o(v, l, cur)).join('')}</select>`;
+  const num = (k, v, min, max) => `<input type="number" inputmode="numeric" data-p="${p}" data-k="${k}" min="${min}" max="${max}" value="${v ?? ''}">`;
+  const tog = (vals, labels, cur, cls = '') => `<div class="wd ${cls}">${vals.map((v, i) => `<button type="button" data-p="${p}" data-tog="${v}" aria-pressed="${(cur || []).includes(v)}">${labels[i]}</button>`).join('')}</div>`;
+  let ed = '';
+  switch (c.t) {
+    case 'day': ed = sel('v', [['bizday', '平日（祝日以外）'], ['weekday', '平日（月〜金）'], ['weekend', '土日'], ['holiday', '祝日'], ['offday', '土日祝']], c.v); break;
+    case 'wd': ed = tog([1, 2, 3, 4, 5, 6, 0], ['月', '火', '水', '木', '金', '土', '日'], c.v); break;
+    case 'mday': ed = `${num('from', c.from, 1, 31)}<span class="w">日〜</span>${num('to', c.to, 1, 31)}<span class="w">日</span>`; break;
+    case 'last': ed = `<span class="w">最終日から</span>${num('n', c.n, 1, 15)}<span class="w">日間</span>`; break;
+    case 'nth': ed = sel('n', [[1, '第1'], [2, '第2'], [3, '第3'], [4, '第4'], [5, '第5'], [-1, '最終']], c.n) + sel('wd', [1, 2, 3, 4, 5, 6, 0].map(i => [i, WD[i] + '曜日']), c.wd); break;
+    case 'month': ed = tog([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => m + '月'), c.v, 'mo'); break;
+    case 'parity': ed = sel('v', [['even', '偶数日'], ['odd', '奇数日']], c.v); break;
+    case 'period': ed = `<input type="date" data-p="${p}" data-k="from" value="${c.from || ''}"><span class="w">〜</span><input type="date" data-p="${p}" data-k="to" value="${c.to || ''}">`; break;
+  }
+  return `${sel('t', COND_TYPES, c.t)}${ed}${sel('not', [['', 'のとき'], ['1', '以外のとき']], c.not ? '1' : '')}`;
+}
+function advBuilder(box, adv, onChange) {
+  const at = p => p.split('.').reduce((o, k) => (k === 'c' ? adv.cond : k === 'i' ? adv.ifs : Array.isArray(o) ? o[+k] : o.items ? o.items[+k] : o.cond && k === 'cond' ? o.cond : o[k]), null);
+  const seg = (p, op) => `<div class="seg" role="group"><button type="button" data-op="${p}" data-v="and" aria-pressed="${op !== 'or'}">すべて満たす（AND）</button><button type="button" data-op="${p}" data-v="or" aria-pressed="${op === 'or'}">どれか1つ（OR）</button></div>`;
+  const draw = () => {
+    const rows = adv.cond.items.map((c, i) => c.items
+      ? `<div class="grp"><div class="grp-h">グループ${seg('c.' + i, c.op)}<button type="button" class="x" style="margin:0" data-del="c.${i}" aria-label="グループを削除">×</button></div>
+          ${c.items.map((x, j) => `<div class="cnd">${condEditor(x, `c.${i}.${j}`)}<button type="button" class="x" data-del="c.${i}.${j}" aria-label="条件を削除">×</button></div>`).join('')}
+          <div class="adv-add"><button type="button" data-add="c.${i}">＋ 条件</button></div></div>`
+      : `<div class="cnd">${condEditor(c, 'c.' + i)}<button type="button" class="x" data-del="c.${i}" aria-label="条件を削除">×</button></div>`).join('');
+    const ifs = adv.ifs.map((x, i) => `<div class="ifrow"><div class="cnd"><span class="w">もし</span>${condEditor(x.cond, `i.${i}.cond`)}<button type="button" class="x" data-del="i.${i}" aria-label="削除">×</button></div>
+      <div class="then"><span class="w">なら</span><select data-p="i.${i}" data-k="act">${[['skip', '通知しない'], ['prev', '前の平日にずらす'], ['next', '次の平日にずらす'], ['time', '時刻を変える']].map(([v, l]) => `<option value="${v}" ${x.act === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      ${x.act === 'time' ? `<input type="time" data-p="i.${i}" data-k="time" value="${x.time || '18:00'}">` : ''}</div></div>`).join('');
+    box.innerHTML = `<div class="adv-h">通知する日の条件</div>${adv.cond.items.length > 1 ? seg('c', adv.cond.op) : ''}${rows}
+      <div class="adv-add"><button type="button" data-add="c">＋ 条件</button><button type="button" data-addgrp>＋ グループ（AND/OR の入れ子）</button></div>
+      <div class="adv-h" style="border-top:.5px solid var(--sep)">もし〜なら</div>${ifs}
+      <div class="adv-add"><button type="button" data-addif>＋ もし〜なら</button></div>`;
+  };
+  const changed = () => { draw(); onChange(); };
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.op) { at(b.dataset.op).op = b.dataset.v; changed(); }
+    else if (b.dataset.add) { const g = at(b.dataset.add); g.items.push({ t: 'day', ...condDefault('day') }); changed(); }
+    else if (b.hasAttribute('data-addgrp')) { adv.cond.items.push({ op: 'or', items: [{ t: 'wd', ...condDefault('wd') }, { t: 'last', ...condDefault('last') }] }); changed(); }
+    else if (b.hasAttribute('data-addif')) { adv.ifs.push({ cond: { t: 'day', v: 'holiday' }, act: 'skip' }); changed(); }
+    else if (b.dataset.del) {
+      const ks = b.dataset.del.split('.'), last = +ks.pop(), parent = ks.join('.');
+      if (parent === 'i') adv.ifs.splice(last, 1);
+      else { const g = at(parent); g.items.splice(last, 1); if (parent !== 'c' && !g.items.length) adv.cond.items.splice(+ks[1], 1); }
+      changed();
+    } else if (b.dataset.tog !== undefined) {
+      const c = at(b.dataset.p), v = +b.dataset.tog; c.v = c.v || [];
+      c.v = c.v.includes(v) ? c.v.filter(x => x !== v) : [...c.v, v]; if (!c.v.length) c.v = [v];
+      changed();
+    }
+  });
+  box.addEventListener('change', e => {
+    const t = e.target; if (!t.dataset.p) return;
+    const o = at(t.dataset.p), k = t.dataset.k;
+    if (k === 't') { for (const key of Object.keys(o)) if (key !== 'not') delete o[key]; Object.assign(o, { t: t.value }, condDefault(t.value)); }
+    else if (k === 'not') { if (t.value) o.not = true; else delete o.not; }
+    else if (k === 'act') { o.act = t.value; if (t.value === 'time' && !o.time) o.time = '18:00'; }
+    else if (['from', 'to', 'n'].includes(k) && t.type === 'number') o[k] = Math.max(+t.min || 1, Math.min(+t.max || 31, +t.value || +t.min || 1));
+    else if (k === 'n' || k === 'wd') o[k] = +t.value;
+    else o[k] = t.value;
+    changed();
+  });
+  draw();
+}
 function ruleKind(r) {
   if (!r) return 'none';
   if (r.freq === 'monthly') return r.byNth ? 'monthlyNth' : 'monthly';
@@ -1225,6 +1312,8 @@ function openDetail(id, opts = {}) {
       <div class="f" ${show('daily weekly monthly monthlyNth yearly parity hourly minutely afterDone')}><span class="lab">終了日</span><input type="date" id="dUntil" value="${rule && rule.until || ''}"></div>
       <div class="f" ${show('daily weekly monthly monthlyNth yearly parity hourly minutely afterDone')}><span class="lab">回数で終了（0は無制限）</span><input type="number" id="dCount" min="0" value="${rule && rule.count || 0}"></div>
     </div><div class="fgroup-f" id="dRuleTxt"></div></div>
+    <div ${show('daily weekly monthly monthlyNth yearly parity')}><div class="fgroup-h">詳細条件</div><div class="fgroup adv" id="dAdv"></div>
+      <div class="fgroup-f">上の繰り返しで決まる日のうち、条件に合う日だけ通知します。「もし〜なら」は上から順に、最初に当てはまったものを使います。</div></div>
     <div><div class="fgroup-h">今後の予定</div><div class="fgroup"><div class="upc" id="dUpc"></div></div></div>
     <div><div class="fgroup">
       <div class="f"><label for="dNag">確実に通知</label><input type="checkbox" class="switch" id="dNag" ${r.nag ? 'checked' : ''}></div>
@@ -1243,8 +1332,10 @@ function openDetail(id, opts = {}) {
       <div id="dDelConfirm" hidden><div class="fgroup-f" style="margin:4px 16px 0">本当に削除しますか？元に戻せません。</div><button class="btn danger center" id="dDelYes" style="font-weight:600">削除する</button></div>
     </div></div>
   </div>`;
+  const adv = { cond: rule && rule.cond ? rule.cond : { op: 'and', items: [] }, ifs: rule && rule.ifs ? rule.ifs : [] };
   openSheet(html, sh => {
     const g = id => sh.querySelector('#' + id);
+    advBuilder(g('dAdv'), adv, () => refresh(true));
     const pressed = name => [...sh.querySelectorAll(`[data-wd="${name}"][aria-pressed="true"]`)].map(b => +b.dataset.v);
     const buildRule = () => {
       const kind = g('dKind').value;
@@ -1266,6 +1357,8 @@ function openDetail(id, opts = {}) {
         case 'afterDone': nr = { ...base, freq: 'afterDone', unit: g('dUnit').value, times: [fmtLocal(dueD).slice(11)] }; break;
       }
       if (DATE_FREQS.includes(nr.freq)) {
+        if (adv.cond.items.length) nr.cond = JSON.parse(JSON.stringify(adv.cond));
+        if (adv.ifs.length) nr.ifs = JSON.parse(JSON.stringify(adv.ifs));
         nr.times = ts.length ? [...new Set(ts)].sort() : [fmtLocal(dueD).slice(11)];
         if (g('dHol').checked) nr.skipHolidays = true;
         if (['daily', 'parity', 'monthly'].includes(nr.freq) && !nr.byNth && pressed('only').length) nr.onlyDays = pressed('only');
