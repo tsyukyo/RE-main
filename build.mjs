@@ -19,7 +19,8 @@ const head = `<!doctype html>
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 </head><body>
 `;
-const body = app.replace(MARK, '<script src="engine.js"></script>\n<script src="core.js"></script>');
+// RIMAIN_PWA: 本番版の印。初回はサンプルを入れず空の状態で始める（?demo を付けるとサンプル入り）
+const body = app.replace(MARK, '<script>window.RIMAIN_PWA = 1;</script>\n<script src="engine.js"></script>\n<script src="core.js"></script>');
 // pwa.js はアプリ本体のスクリプトより後に読む（S や queue を使うため）
 const pwa = head + body + '\n<script src="pwa.js"></script>\n</body></html>\n';
 writeFileSync('public/index.html', pwa);

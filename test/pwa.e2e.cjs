@@ -17,7 +17,7 @@ const OUT = process.env.OUT || '.';
     Object.defineProperty(Notification, 'permission', { get: () => 'granted' }); Notification.requestPermission = async () => 'granted';
     PushManager.prototype.subscribe = async function () { localStorage.setItem('fakeSub', '1'); return this.getSubscription(); };
   });
-  await p.goto(BASE + '/'); await p.waitForTimeout(1500);
+  await p.goto(BASE + '/?demo'); await p.waitForTimeout(1500);
   const swOk = await p.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()));
   assert.ok(swOk, 'Service Worker が登録されている');
   const st = await p.evaluate(() => RimainCore.get('state').then(s => s && s.reminders.length));
