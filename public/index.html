@@ -399,7 +399,11 @@ html, :root.sheet-open body { background: #000; }
 :root { --page-edge: -1px 0 0 rgba(0,0,0,.08), -12px 0 28px rgba(0,0,0,.16); --under: #e9e9ee; }
 :root[data-theme="dark"] { --page-edge: -1px 0 0 rgba(255,255,255,.28), -16px 0 32px rgba(0,0,0,.9); --under: #1c1c1e; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page-edge: -1px 0 0 rgba(255,255,255,.28), -16px 0 32px rgba(0,0,0,.9); --under: #1c1c1e; } }
-.under { position: absolute; left: 0; right: 0; overflow: hidden; pointer-events: none; background: var(--under); z-index: 0; }
+.under { position: absolute; left: 0; right: 0; overflow: hidden; pointer-events: none; background: var(--bg); z-index: 0; --f: 0; }
+/* 前の画面の背景は、指の進み具合 --f に合わせて --under から --bg へじわっと移る */
+.under::before { content: ""; position: absolute; inset: 0; background: var(--under); opacity: calc(1 - var(--f)); }
+.under.anim::before { transition: opacity .24s cubic-bezier(.2,.8,.2,1); }
+.under > .inner { position: relative; }
 .under > .inner { transform-origin: 0 0; opacity: .55; }
 .app.swiping #scroll { position: relative; z-index: 1; box-shadow: var(--page-edge); }
 :root[data-nav="back"]::view-transition-new(page) { animation-name: pageInL; }
@@ -601,8 +605,11 @@ function makeUnder() {
 }
 function moveUnder(u, f, anim) {
   if (!u) return; const i = u.firstChild;
-  i.style.transition = anim ? 'transform .24s cubic-bezier(.2,.8,.2,1), opacity .24s' : 'none';
-  i.style.transform = `translateX(${(-28 * (1 - f)).toFixed(2)}%)`; i.style.opacity = (.55 + .45 * f).toFixed(3);
+  i.style.transition = anim ? 'transform .24s cubic-bezier(.2,.8,.2,1), opacity .24s cubic-bezier(.2,.8,.2,1)' : 'none';
+  // 変化を指の動きに対してなめらかにする（始めはゆっくり、終わりに向けて追いつく）
+  const e = f * f * (3 - 2 * f);
+  u.classList.toggle('anim', !!anim); u.style.setProperty('--f', e.toFixed(3));
+  i.style.transform = `translateX(${(-28 * (1 - f)).toFixed(2)}%)`; i.style.opacity = (.55 + .45 * e).toFixed(3);
 }
 function dropUnder(u) { if (u) u.remove(); $('#app').classList.remove('swiping'); }
 // 左端からのスワイプで戻る（指に追従し、離した位置と速さで戻るか決める）
@@ -626,7 +633,7 @@ function dropUnder(u) { if (u) u.remove(); $('#app').classList.remove('swiping')
     const v = s.dx / Math.max(1, performance.now() - s.t);
     if (s.dx > sc.clientWidth * .35 || v > .5) {
       sc.style.transition = 'transform .24s cubic-bezier(.2,.8,.2,1)'; sc.style.transform = 'translateX(100%)'; moveUnder(s.under, 1, true);
-      setTimeout(() => { sc.style.transition = ''; sc.style.transform = ''; dropUnder(s.under); view = { name: 'home' }; render(); sc.scrollTop = homeScroll; }, 240);
+      setTimeout(() => { sc.style.transition = ''; sc.style.transform = ''; dropUnder(s.under); view = { name: 'home' }; render(); sc.scrollTop = homeScroll; }, 250);
     } else {
       sc.style.transition = 'transform .45s cubic-bezier(.34,1.45,.64,1)'; sc.style.transform = ''; moveUnder(s.under, 0, true);
       setTimeout(() => { sc.style.transition = ''; dropUnder(s.under); }, 460);
