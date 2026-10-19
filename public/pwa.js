@@ -75,14 +75,18 @@
     const title = st ? st.title : r.title;
     const url = st ? stepUrl(r, st) : r.url;
     const sub = st ? `${r.title}（${step + 1}/${r.steps.length}）` : r.rule ? '↻ ' + describeRule(r.rule) : '';
+    // 通知から開いたら内容をコピー（設定で変更可）
+    const clip = typeof copyTextFor === 'function' ? copyTextFor({ title, url }, st ? { notes: st.notes || '' } : r) : '';
     const html = sheetHead('通知', '閉じる', '') + `<div class="sheet-b gut act-sheet">
       <div class="act-head"><div class="act-title">${esc(title)}</div>${sub ? `<div class="act-sub">${esc(sub)}</div>` : ''}</div>
       ${url ? `<a class="act-btn pri" href="${esc(url)}" target="_blank" rel="noopener" data-a="open">URL を開く<span>${esc(hostOf(url))}</span></a>` : ''}
       <button class="act-btn ${url ? '' : 'pri'}" data-a="done">完了</button>
+      ${clip ? `<button class="act-btn copy-btn" id="actCopy" type="button">コピー</button>` : ''}
       <div class="act-row"><button class="act-btn" data-a="10">10分後</button><button class="act-btn" data-a="60">1時間後</button><button class="act-btn" data-a="tomorrow">明日の朝</button></div>
     </div>`;
     openSheet(html, sh => {
       sh.querySelector('[data-act="ok"]').onclick = closeSheet;
+      if (clip) { sh.querySelector('#actCopy').onclick = () => writeClip(clip).then(ok => { if (ok) markCopied(); else sh.querySelector('#actCopy').textContent = 'コピーできません'; }); autoCopy(`act:${id}:${step}:${Date.now()}`, clip); }
       sh.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => {
         const a = b.dataset.a;
         if (a === 'open') { setTimeout(closeSheet, 50); return; }
@@ -116,13 +120,13 @@
       let body, foot;
       if (!canPush && isIOS && !standalone) {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">ホーム画面から開くと使えます</span></div>`;
-        foot = 'Safari の共有ボタン →「ホーム画面に追加」で追加し、ホーム画面のりまいんから開いてください（iOS 16.4 以降）。';
+        foot = 'Safari の共有ボタン →「ホーム画面に追加」で追加し、ホーム画面のRE:mainから開いてください（iOS 16.4 以降）。';
       } else if (!canPush) {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">この環境では使えません</span></div>`;
         foot = 'アプリを開いている間は、画面上部のバナーでお知らせします。';
       } else if (perm === 'denied') {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">拒否されています</span></div>`;
-        foot = isIOS ? '設定アプリ →「通知」→「りまいん」で通知を許可してから、もう一度開いてください。' : 'ブラウザのサイト設定で通知を許可してください。';
+        foot = isIOS ? '設定アプリ →「通知」→「RE:main」で通知を許可してから、もう一度開いてください。' : 'ブラウザのサイト設定で通知を許可してください。';
       } else if (!s) {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">オフ</span></div><button class="btn" id="pOn">オンにする</button><div class="msg" id="pMsg"></div>`;
         foot = 'オンにすると、アプリを閉じていても時刻に通知が届きます。サーバーへ送るのは通知の時刻だけで、内容や URL は送りません。';

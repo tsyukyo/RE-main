@@ -13,5 +13,14 @@
   },
   // 無料プランで使えるのは SQLite 版の Durable Object
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Scheduler", "Keys"] }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // main 以外のブランチのプレビュー用。各プレビューは自前の Durable Object を持つので、コードが使うバインディングだけ宣言する
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        { "name": "SCHED", "class_name": "Scheduler" },
+        { "name": "KEYS", "class_name": "Keys" }
+      ]
+    }
+  }
 }

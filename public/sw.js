@@ -1,4 +1,4 @@
-// りまいん Service Worker
+// RE:main Service Worker
 // プッシュには「時刻」しか入っていない。通知の文面は端末内のデータ（IndexedDB）から作る
 importScripts('engine.js', 'core.js');
 const CACHE = 'rimain-v1';
@@ -22,7 +22,7 @@ self.addEventListener('fetch', e => {
 
 async function showDue(data) {
   if (data.test) {
-    return self.registration.showNotification('りまいん（テスト）', { body: '閉じている間の通知が届きました。タップするとアプリが開きます。', tag: 'rimain-test', icon: 'icon-192.png', data: { test: true } });
+    return self.registration.showNotification('RE:main（テスト）', { body: '閉じている間の通知が届きました。タップするとアプリが開きます。', tag: 'rimain-test', icon: 'icon-192.png', data: { test: true } });
   }
   const S = await RimainCore.get('state').catch(() => null);
   const shown = (await RimainCore.get('shown').catch(() => null)) || [];
@@ -35,7 +35,7 @@ async function showDue(data) {
   const list = [...latest.values()];
   if (!list.length) {
     // iPhone では、プッシュを受けたら必ず通知を出す決まりがある
-    return self.registration.showNotification('りまいん', { body: 'リマインダーの時刻です。タップして確認してください。', tag: 'rimain-generic', icon: 'icon-192.png', data: {} });
+    return self.registration.showNotification('RE:main', { body: 'リマインダーの時刻です。タップして確認してください。', tag: 'rimain-generic', icon: 'icon-192.png', data: {} });
   }
   await RimainCore.set('shown', [...shown, ...due.map(f => f.key)].slice(-500));
   await Promise.all(list.map(f => self.registration.showNotification(f.title || 'リマインダー', {

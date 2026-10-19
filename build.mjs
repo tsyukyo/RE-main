@@ -6,9 +6,10 @@ const MARK = '<script>\n/*ENGINE*/\n</script>';
 if (!app.includes(MARK)) throw new Error('app.html に /*ENGINE*/ がありません');
 
 // PWA 版: engine.js / core.js / pwa.js を別ファイルで読み込む（Service Worker と共有するため）
+// maximum-scale=1: iPhone で入力欄をタップしたときの自動ズームを止める（ピンチでの拡大は iOS 側で引き続きできる）
 const head = `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
@@ -28,5 +29,5 @@ copyFileSync('app/engine.js', 'public/engine.js');
 mkdirSync('dist', { recursive: true });
 const fragment = app.replace(MARK, '<script>\n' + engine + '\n</script>');
 writeFileSync('dist/rimain-fragment.html', fragment);
-writeFileSync('dist/rimain.html', '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>\n' + fragment + '\n</body></html>\n');
+writeFileSync('dist/rimain.html', '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"></head><body>\n' + fragment + '\n</body></html>\n');
 console.log('built public/index.html, dist/rimain.html');

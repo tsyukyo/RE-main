@@ -64,12 +64,12 @@ const OUT = process.env.OUT || '.';
   await cdp.send('ServiceWorker.deliverPushMessage', { origin: BASE, registrationId: regs[0].registrationId, data: JSON.stringify({ at: due, n: 1 }) });
   await p.waitForTimeout(800);
   ns = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map(n => n.title));
-  assert.deepEqual(ns, ['りまいん']);
+  assert.deepEqual(ns, ['RE:main']);
   // テスト通知
   await cdp.send('ServiceWorker.deliverPushMessage', { origin: BASE, registrationId: regs[0].registrationId, data: JSON.stringify({ test: true }) });
   await p.waitForTimeout(500);
   ns = await p.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map(n => n.title));
-  assert.ok(ns.includes('りまいん（テスト）'));
+  assert.ok(ns.includes('RE:main（テスト）'));
 
   // 開き直すと、端末の通知で出した回はバナーに重ねない
   await p.reload(); await p.waitForTimeout(1500);

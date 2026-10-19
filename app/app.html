@@ -1,7 +1,7 @@
-<title>りまいん</title>
+<title>RE:main</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="りまいん">
+<meta name="apple-mobile-web-app-title" content="RE:main">
 <style>
 /* Layout: iOS「リマインダー」準拠の1カラムアプリ。下部にリマインくん式の自然文入力バーを常設 */
 :root {
@@ -9,6 +9,9 @@
   --fill: rgba(118,118,128,.12); --blue: #007aff; --red: #ff3b30; --orange: #ff9500; --green: #34c759;
   --purple: #af52de; --gray: #8e8e93; --teal: #30b0c7; --indigo: #5856d6; --bar: rgba(249,249,249,.94);
   --shadow: 0 10px 30px rgba(0,0,0,.18);
+  /* 動きのトークン（ui-ux-pro-max: motion-consistency）。押下は速く、戻りと入場はばね、退場は短く */
+  --ease-out: cubic-bezier(.22,1,.36,1); --ease-in: cubic-bezier(.4,0,1,1); --spring: cubic-bezier(.34,1.45,.64,1);
+  --ease-sheet: cubic-bezier(.32,.72,0,1); --t-press: 80ms; --t-exit: 220ms;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -22,22 +25,30 @@
   --purple: #bf5af2; --gray: #98989d; --teal: #40c8e0; --indigo: #5e5ce6; --bar: rgba(22,22,24,.94);
   --shadow: 0 10px 30px rgba(0,0,0,.6); color-scheme: dark; }
 html, body { height: 100%; }
+/* ダブルタップでの拡大と、文字サイズの自動調整を止める（入力時のズームは viewport と 16px 以上の文字で防ぐ） */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
 [hidden] { display: none !important; }
-body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 17px; -webkit-tap-highlight-color: transparent; overflow: hidden; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 17px; -webkit-tap-highlight-color: transparent; overflow: hidden; overscroll-behavior: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { background: none; border: 0; padding: 0; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
-.app { max-width: 520px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; position: relative; background: var(--bg); }
+.app { max-width: 520px; margin: 0 auto; height: var(--vvh, 100%); display: flex; flex-direction: column; position: relative; background: var(--bg); }
 .gut { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
 /* ナビゲーションバー */
-.nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 44px; padding-block: 4px; }
-.nav .left { justify-self: start; } .nav .right { justify-self: end; display: flex; gap: 16px; }
-.navbtn { color: var(--blue); display: inline-flex; align-items: center; gap: 2px; font-size: 17px; min-height: 36px; }
+.nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 52px; padding-block: 4px; }
+.nav .left { justify-self: start; } .nav .right { justify-self: end; display: flex; gap: 6px; }
+.navbtn { color: var(--blue); display: inline-flex; align-items: center; gap: 2px; font-size: 17px; min-height: 44px; }
 .navbtn svg { width: 22px; height: 22px; }
+/* 右上・左上のボタンは丸い面を付けて大きく（タップ領域 44px） */
+.nav .navbtn { min-width: 44px; justify-content: center; }
+.nav .right .navbtn { width: 44px; height: 44px; border-radius: 50%; background: var(--fill); }
+.nav .navbtn svg { width: 26px; height: 26px; }
+#backBtn { font-size: 18px; padding-right: 6px; margin-left: -6px; }
+#backBtn svg { width: 30px; height: 30px; }
 .nav-title { font-weight: 600; opacity: 0; transition: opacity .2s; }
 .nav-title.show { opacity: 1; }
-.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-block: 0 24px; }
+.scroll { flex: 1; overflow-y: auto; background: var(--bg); view-transition-name: page; -webkit-overflow-scrolling: touch; padding-block: 0 24px; }
 .large { font-size: 34px; font-weight: 700; letter-spacing: .01em; margin: 2px 0 12px; text-wrap: balance; }
 
 /* 検索 */
@@ -47,8 +58,23 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .search input::placeholder { color: var(--fg2); }
 
 /* スマートリスト */
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 26px; }
-.tile { background: var(--card); border-radius: 12px; padding: 10px 12px 9px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; text-align: left; min-height: 82px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.home-h { margin: 0 2px 10px; }
+.eyebrow { font-size: 13px; font-weight: 600; color: var(--fg2); letter-spacing: .04em; }
+.home-t { margin: 0; letter-spacing: -.02em; }
+.home-t .c { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; padding: 0 .02em; }
+:root { --brand: linear-gradient(135deg, #5846f5, #18aaff); }
+.pills { display: flex; gap: 8px; margin-bottom: 28px; }
+.pill { flex: 1; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border-radius: 12px; background: var(--card); font-size: 15px; font-weight: 600; color: var(--fg); transition: transform .5s var(--spring), filter .3s, background-color .25s; }
+.pill .pdot { width: 24px; height: 24px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; flex: none; }
+.pill .pdot svg { width: 14px; height: 14px; }
+.pill .pn { margin-left: auto; color: var(--fg2); font-variant-numeric: tabular-nums; }
+.pill.is-pressed { transform: scale(.95); filter: grayscale(1); transition-duration: var(--t-press); }
+.sec-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.sec-row .sec-h { margin: 0; }
+.sec-row .addlist { margin: 0; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--blue); }
+.sec-row .addlist svg { width: 18px; height: 18px; }
+.tile { background: var(--card); border-radius: 14px; padding: 12px 14px 11px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; text-align: left; min-height: 82px; }
 .tile .ic { width: 32px; height: 32px; border-radius: 50%; background: var(--c); display: grid; place-items: center; color: #fff; }
 .tile .ic svg { width: 18px; height: 18px; }
 .tile .num { font-size: 28px; font-weight: 700; line-height: 32px; font-variant-numeric: tabular-nums; }
@@ -64,7 +90,7 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .lrow .cnt { color: var(--fg2); font-variant-numeric: tabular-nums; }
 .lrow .chev { width: 8px; color: var(--fg3); }
 .addlist { color: var(--blue); margin-top: 14px; font-size: 17px; }
-.hint { color: var(--fg2); font-size: 13px; line-height: 1.5; margin: 18px 4px 0; }
+.hint { color: var(--fg2); font-size: 13px; line-height: 1.5; margin: 16px 4px 0; text-align: center; }
 
 /* リマインダー行 */
 .items { display: flex; flex-direction: column; }
@@ -94,11 +120,11 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 /* 入力バー（リマインくん式） */
 .composer { background: var(--bar); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-top: .5px solid var(--sep); padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
 .qform { display: flex; gap: 8px; align-items: center; }
-.qform input { flex: 1; min-width: 0; height: 40px; border-radius: 20px; border: .5px solid var(--sep); background: var(--card); padding: 0 16px; font-size: 16px; outline: none; }
-.qform input:focus { border-color: var(--blue); }
-.send { width: 40px; height: 40px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; flex: none; }
-.send:disabled { background: var(--fg3); }
-.send svg { width: 20px; height: 20px; }
+.qform input { flex: 1; min-width: 0; height: 50px; border-radius: 25px; border: .5px solid var(--sep); background: var(--card); padding: 0 18px; font-size: 17px; outline: none; transition: border-color .2s, box-shadow .25s var(--ease-out); }
+.qform input:focus, .urlrow input:focus, .chat-in input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 18%, transparent); }
+.send { width: 46px; height: 46px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; flex: none; box-shadow: 0 4px 14px color-mix(in srgb, var(--blue) 40%, transparent); }
+.send:disabled { background: var(--fg3); box-shadow: none; transform: scale(.86); }
+.send svg { width: 22px; height: 22px; }
 .preview { background: var(--card); border-radius: 14px; padding: 10px 12px; display: grid; gap: 6px; box-shadow: 0 1px 0 var(--sep); }
 .pv-title { font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -107,14 +133,15 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .chip.n { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
 .chip.w { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
 .pv-note { font-size: 12px; color: var(--fg2); }
-.pv-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--fg2); }
-.pv-ask button { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; }
-.linkbtn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); flex: none; }
+.wg { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.wg-h { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--fg2); letter-spacing: .04em; margin-bottom: -2px; }
+.chat-in .chips.when { display: grid; gap: 10px; max-height: min(34svh, 42vh); overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
+.chat-in .chips button.sugg { background: var(--blue); color: #fff; border-color: transparent; }
+.linkbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); flex: none; }
 .linkbtn[aria-pressed="true"], .linkbtn.has { color: var(--blue); }
 .linkbtn svg { width: 22px; height: 22px; }
 .urlrow { display: flex; gap: 8px; align-items: center; }
-.urlrow input { flex: 1; min-width: 0; height: 36px; border-radius: 10px; border: .5px solid var(--sep); background: var(--card); padding: 0 12px; font-size: 15px; outline: none; }
-.urlrow input:focus { border-color: var(--blue); }
+.urlrow input { flex: 1; min-width: 0; height: 44px; border-radius: 12px; border: .5px solid var(--sep); background: var(--card); padding: 0 14px; font-size: 16px; outline: none; transition: border-color .2s, box-shadow .2s; }
 .urlrow .lab { font-size: 13px; color: var(--fg2); white-space: nowrap; }
 .chip.u { background: color-mix(in srgb, var(--teal) 16%, transparent); color: var(--teal); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rlink { display: inline-flex; align-items: center; gap: 3px; color: var(--blue); text-decoration: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -124,22 +151,24 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .sheet.tall { height: calc(100% - 40px - env(safe-area-inset-top, 0px)); }
 .chat { flex: 1; overflow-y: auto; padding-block: 16px; display: flex; flex-direction: column; gap: 10px; }
 .bub { display: flex; gap: 8px; align-items: flex-end; max-width: 86%; }
-.bub .av { width: 28px; height: 28px; border-radius: 50%; background: var(--green); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; flex: none; }
+.bub .av { width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; flex: none; }
 .bub .tx { padding: 9px 13px; border-radius: 18px; line-height: 1.45; font-size: 16px; word-break: break-word; }
 .bub.bot .tx { background: var(--card); border-bottom-left-radius: 6px; }
 .bub.me { align-self: flex-end; }
 .bub.me .tx { background: var(--blue); color: #fff; border-bottom-right-radius: 6px; }
 .bub .sub { display: block; font-size: 13px; color: var(--fg2); margin-top: 3px; }
-.bub.pop { animation: pop .22s ease-out; }
-@keyframes pop { from { transform: translateY(6px); opacity: .3; } }
+.bub.pop { animation: pop .5s var(--spring) both; transform-origin: bottom left; }
+.bub.bot.pop .tx { animation: grow .45s .5s var(--spring) both; transform-origin: left center; }
+@keyframes grow { from { transform: scale(.96); } }
+.bub.me.pop { transform-origin: bottom right; }
+@keyframes pop { from { transform: translateY(10px) scale(.9); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bub.pop { animation: none; } }
 .chat-in { border-top: .5px solid var(--sep); background: var(--bar); padding-block: 8px calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
-.chat-in .chips button { font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); color: var(--blue); font-weight: 600; }
+.chat-in .chips button { font-size: 16px; min-height: 42px; padding: 0 16px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); color: var(--blue); font-weight: 600; }
 .chat-in .chips button.skip { color: var(--fg); }
 .chat-in form { display: flex; gap: 8px; }
-.chat-in input { flex: 1; min-width: 0; height: 40px; border-radius: 20px; border: .5px solid var(--sep); background: var(--card); padding: 0 16px; font-size: 16px; outline: none; }
-.chat-in input:focus { border-color: var(--blue); }
-.chat-in .next { height: 40px; padding: 0 16px; border-radius: 20px; background: var(--blue); color: #fff; font-weight: 600; flex: none; }
+.chat-in input { flex: 1; min-width: 0; height: 50px; border-radius: 25px; border: .5px solid var(--sep); background: var(--card); padding: 0 18px; font-size: 17px; outline: none; transition: border-color .2s, box-shadow .25s var(--ease-out); }
+.chat-in .next { height: 50px; padding: 0 20px; border-radius: 25px; background: var(--blue); color: #fff; font-weight: 600; flex: none; }
 .steps { display: flex; gap: 4px; justify-content: center; padding-top: 2px; }
 .steps i { width: 18px; height: 4px; border-radius: 2px; background: var(--fill); }
 .steps i.on { background: var(--blue); }
@@ -149,7 +178,7 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .cbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .cbar .mode { font-size: 12px; color: var(--fg2); }
 .confirm-note { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--fg2); line-height: 1.5; margin: 0 4px; }
-.confirm-note b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; font-size: 11px; display: grid; place-items: center; }
+.confirm-note b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 11px; display: grid; place-items: center; }
 .gsteps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .gs { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--fill); color: var(--fg); font-variant-numeric: tabular-nums; }
 .gs.done { text-decoration: line-through; color: var(--fg2); }
@@ -162,26 +191,36 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .gstep .tm { font-size: 14px; color: var(--blue); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .gstep .rm { width: 28px; height: 28px; border-radius: 50%; color: var(--red); display: grid; place-items: center; font-size: 20px; line-height: 1; }
 .gstep .sub { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; color: var(--fg2); }
-.gstep .sub input[type=number] { width: 64px; text-align: right; border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 15px; }
-.gstep .sub select { border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 15px; }
-.gstep .sub input[type=url] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 14px; color: var(--blue); }
+.gstep .sub input[type=number] { width: 64px; text-align: right; border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 16px; }
+.gstep .sub select { border: 0; background: var(--fill); border-radius: 8px; padding: 5px 8px; font-size: 16px; }
+.gstep .sub input[type=url] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 16px; color: var(--blue); }
 .gstep.done input[type=text] { text-decoration: line-through; color: var(--fg2); }
 .gsum { font-size: 13px; color: var(--fg2); margin: 6px 16px 0; font-variant-numeric: tabular-nums; }
 .inl { display: flex; gap: 8px; align-items: center; padding: 8px 16px; }
-.inl input[type=text] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 8px 10px; font-size: 15px; }
+.inl input[type=text] { flex: 1; min-width: 0; border: 0; background: var(--fill); border-radius: 8px; padding: 8px 10px; font-size: 16px; }
 .inl button { color: var(--blue); font-weight: 600; white-space: nowrap; }
 .toast .undo { color: var(--blue); font-weight: 700; margin-left: 10px; filter: brightness(1.4); }
 .f input[type=url] { width: 100%; border: 0; background: transparent; outline: none; padding: 12px 0; font-size: 16px; color: var(--blue); }
 .examples { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.composer:not(:focus-within) .examples { display: none; }
+.cbar .newbtn + .mode + .newbtn { color: var(--fg2); }
 .examples::-webkit-scrollbar { display: none; }
 .ex { white-space: nowrap; font-size: 13px; padding: 6px 11px; border-radius: 999px; background: var(--card); border: .5px solid var(--sep); }
 
 /* シート */
-.sheet-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
-.sheet { background: var(--bg); width: 100%; max-width: 520px; max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); border-radius: 14px 14px 0 0; display: flex; flex-direction: column; animation: up .28s cubic-bezier(.2,.8,.2,1); }
+.sheet-wrap { position: fixed; left: 0; right: 0; top: 0; height: var(--vvh, 100%); background: rgba(0,0,0,.35); z-index: 40; display: flex; align-items: flex-end; justify-content: center; animation: scrimIn .35s var(--ease-out); }
+.sheet { background: var(--bg); width: 100%; max-width: 520px; max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; position: relative; animation: up .52s var(--ease-sheet); box-shadow: 0 -8px 30px rgba(0,0,0,.12); }
+.sheet::before { content: ""; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--fg3); opacity: .7; z-index: 1; }
+.sheet.dragging { animation: none; transition: none; }
+.sheet.settle { transition: transform .45s var(--spring); }
+.sheet-wrap.closing { pointer-events: none; animation: scrimOut var(--t-exit) var(--ease-in) forwards; }
+.sheet-wrap.closing .sheet { animation: down var(--t-exit) var(--ease-in) forwards; }
 @keyframes up { from { transform: translateY(100%); } }
+@keyframes down { to { transform: translateY(100%); } }
+@keyframes scrimIn { from { background-color: transparent; } }
+@keyframes scrimOut { to { background-color: transparent; } }
 @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
-.sheet-h { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 52px; border-bottom: .5px solid var(--sep); }
+.sheet-h { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 56px; padding-top: 6px; border-bottom: .5px solid var(--sep); touch-action: none; }
 .sheet-h .t { font-weight: 600; }
 .sheet-h .r { justify-self: end; font-weight: 600; }
 .sheet-b { overflow-y: auto; padding-block: 16px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 22px; }
@@ -191,13 +230,33 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .f { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 46px; position: relative; }
 .f + .f::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
 .f > label, .f > .lab { flex: 1; min-width: 0; }
+.newlist { gap: 8px; }
+.newlist .nl-ok { flex: none; min-height: 36px; padding: 0 14px; border-radius: 999px; background: var(--blue); color: #fff; font-weight: 600; font-size: 15px; }
 .f input[type=text], .f textarea { width: 100%; border: 0; background: transparent; outline: none; padding: 12px 0; font-size: 17px; }
-.f textarea { resize: none; min-height: 64px; font-size: 15px; }
+.f textarea { resize: none; min-height: 64px; font-size: 16px; }
 .f input[type=date], .f input[type=time], .f input[type=datetime-local], .f input[type=number], .f select {
   border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; font-size: 16px; color: var(--fg); max-width: 60%; }
 .f input[type=number] { width: 70px; text-align: right; }
 .f .val { color: var(--fg2); }
 .wd { display: flex; gap: 6px; padding: 10px 16px; flex-wrap: wrap; }
+.adv-h { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; font-weight: 600; }
+.adv .seg { margin: 8px 16px; }
+.cnd { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 16px; border-bottom: .5px solid var(--sep); }
+.cnd select, .cnd input { border: 0; background: var(--fill); border-radius: 8px; padding: 7px 10px; font-size: 16px; color: var(--fg); min-height: 36px; }
+.cnd input[type=number] { width: 64px; text-align: right; }
+.cnd .wd { padding: 2px 0; flex-basis: 100%; }
+.cnd .wd.mo button { width: 40px; border-radius: 10px; font-size: 14px; }
+.cnd .w { font-size: 15px; color: var(--fg2); }
+.cnd .x { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; background: var(--fill); color: var(--red); font-size: 20px; line-height: 1; }
+.grp { margin: 10px 12px; border: 1.5px dashed color-mix(in srgb, var(--blue) 45%, var(--sep)); border-radius: 14px; overflow: hidden; }
+.grp .grp-h { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; font-size: 13px; color: var(--fg2); }
+.grp .grp-h .seg { flex: 1; margin: 0; }
+.adv-add { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 12px; }
+.adv-add button { min-height: 38px; padding: 0 14px; border-radius: 999px; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); font-weight: 600; font-size: 15px; }
+.ifrow { border-bottom: .5px solid var(--sep); }
+.ifrow .cnd { border-bottom: 0; padding-bottom: 4px; }
+.ifrow .then { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 16px 10px; }
+.ifrow .then select, .ifrow .then input { border: 0; background: var(--fill); border-radius: 8px; padding: 7px 10px; font-size: 16px; color: var(--fg); min-height: 36px; }
 .wd button { width: 36px; height: 36px; border-radius: 50%; background: var(--fill); font-size: 15px; }
 .wd button[aria-pressed="true"] { background: var(--blue); color: #fff; }
 .switch { appearance: none; -webkit-appearance: none; width: 51px; height: 31px; border-radius: 16px; background: var(--fill); position: relative; transition: background .2s; flex: none; cursor: pointer; }
@@ -212,7 +271,7 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .colors { display: flex; gap: 10px; padding: 12px 16px; flex-wrap: wrap; }
 .colors button { width: 32px; height: 32px; border-radius: 50%; background: var(--c); }
 .colors button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--fg3); }
-.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; width: 100%; min-height: 160px; border: 0; background: transparent; padding: 12px 16px; resize: vertical; color: var(--fg); outline: none; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 16px; width: 100%; min-height: 160px; border: 0; background: transparent; padding: 12px 16px; resize: vertical; color: var(--fg); outline: none; }
 .msg { font-size: 13px; padding: 0 16px 12px; }
 .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
 .seg { display: flex; background: var(--fill); border-radius: 9px; padding: 2px; margin: 10px 16px; }
@@ -229,10 +288,10 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 
 /* 通知バナー・トースト */
 .banner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); width: calc(100% - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 500px; z-index: 60;
-  background: color-mix(in srgb, var(--card) 90%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; animation: drop .3s ease-out; }
+  background: color-mix(in srgb, var(--card) 90%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; animation: drop .55s var(--spring); }
 @keyframes drop { from { transform: translate(-50%, -120%); } }
 .bn-top { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg2); }
-.bn-top .appic { width: 20px; height: 20px; border-radius: 5px; background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.bn-top .appic { width: 20px; height: 20px; border-radius: 5px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
 .bn-top .when { margin-left: auto; }
 .bn-title { font-weight: 600; }
 .bn-sub { font-size: 15px; color: var(--fg2); }
@@ -240,10 +299,118 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 .bn-acts button { flex: 1; min-width: 70px; background: var(--fill); border-radius: 10px; padding: 8px 6px; font-size: 14px; font-weight: 600; }
 .bn-acts button.pri, .bn-acts a.pri { background: var(--blue); color: #fff; }
 .bn-acts a.btnlike { flex: 1; min-width: 70px; border-radius: 10px; padding: 8px 6px; font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; }
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(130px + env(safe-area-inset-bottom, 0px)); z-index: 55; width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 440px; box-sizing: border-box;
-  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--composer-h, 130px) + 10px); z-index: 55; width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 440px; box-sizing: border-box;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); animation: toastIn .5s var(--spring); }
+.toast.out { animation: toastOut var(--t-exit) var(--ease-in) forwards; }
+@keyframes toastIn { from { transform: translate(-50%, 24px) scale(.94); opacity: 0; } }
+@keyframes toastOut { to { transform: translate(-50%, 12px) scale(.98); opacity: 0; } }
 .bot { display: flex; gap: 8px; align-items: flex-start; }
-.bot b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff; font-size: 11px; display: grid; place-items: center; margin-top: 1px; }
+.bot b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 11px; display: grid; place-items: center; margin-top: 1px; }
+
+/* 押した感触（ui-ux-pro-max: press-feedback / scale-feedback / spring-physics）
+   押した瞬間に 80ms で縮み、離すとばねで戻る。レイアウトは動かさない */
+.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn {
+  transition: transform .5s var(--spring), background-color .25s var(--ease-out), color .25s, box-shadow .25s var(--ease-out), opacity .3s var(--ease-out), filter .3s var(--ease-out); }
+:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
+.tile.is-pressed { transform: scale(.94); filter: grayscale(1); background-color: color-mix(in srgb, var(--card) 85%, var(--fg)); transition-duration: var(--t-press); }
+.tile .ic { transition: transform .55s var(--spring); }
+.tile.is-pressed .ic { transform: scale(1.15) rotate(-8deg); transition-duration: .15s; }
+.send.is-pressed:not(:disabled) { transform: scale(.8); }
+.navbtn { transition: opacity .25s var(--ease-out), transform .45s var(--spring); }
+.navbtn.is-pressed { opacity: .3; filter: grayscale(1); transform: scale(.88); transition-duration: var(--t-press); }
+/* 離した直後にふわっと膨らみ、まわりに淡い光の輪が広がって消える */
+.released { animation: release .55s var(--spring); }
+@keyframes release {
+  0% { transform: scale(.9); box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 35%, transparent); }
+  45% { transform: scale(1.08); }
+  100% { transform: scale(1); box-shadow: 0 0 0 14px transparent; } }
+.tile.released { animation-name: releaseTile; }
+@keyframes releaseTile { 0% { transform: scale(.94); } 50% { transform: scale(1.04); } 100% { transform: scale(1); } }
+.lrow, .btn { transition: background-color .3s var(--ease-out); }
+.lrow.is-pressed, .btn.is-pressed { background-color: var(--fill); transition-duration: 0s; }
+.row-main { transition: opacity .3s var(--ease-out); }
+.row-main.is-pressed { opacity: .5; transition-duration: var(--t-press); }
+.check { position: relative; transition: background .15s, border-color .15s, transform .5s var(--spring); }
+.check.is-pressed { transform: scale(.8); transition-duration: var(--t-press); }
+/* 完了: 丸が塗りつぶされ、白いチェックが描かれ、輪が広がる */
+.check.on { animation: checkPop .6s var(--spring); background: var(--c); border-color: var(--c); }
+.check.on::after { width: 12px; height: 7px; border-radius: 0; background: transparent; border: solid #fff; border-width: 0 0 2.5px 2.5px; transform: translateY(-1px) rotate(-45deg); animation: tick .3s .08s var(--ease-out) both; }
+@keyframes tick { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.check.on::before { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--c); animation: ring .6s var(--ease-out) forwards; pointer-events: none; }
+@keyframes ring { from { transform: scale(1); opacity: .9; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes checkPop {
+  0% { transform: scale(.8); box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 45%, transparent); }
+  45% { transform: scale(1.18); }
+  100% { transform: scale(1); box-shadow: 0 0 0 12px transparent; } }
+/* 行のスワイプ: 右で完了、左で操作ボタン */
+.swipe { position: relative; overflow: hidden; }
+.swipe > .row { background: var(--bg); touch-action: pan-y; z-index: 1; }
+.swipe > .row.settle { transition: transform .5s var(--spring); }
+.sw-l, .sw-r { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; visibility: hidden; }
+.swipe[data-dir="r"] .sw-l, .swipe[data-dir="l"] .sw-r { visibility: visible; }
+.sw-l { left: 0; right: 0; padding-left: 18px; gap: 8px; background: var(--fg3); color: #fff; font-weight: 700; font-size: 15px; transition: background-color .2s; }
+.sw-l svg { width: 22px; height: 22px; transition: transform .45s var(--spring); }
+.swipe.armed .sw-l { background: var(--green); }
+.swipe.armed .sw-l svg { transform: scale(1.3); }
+.sw-r { right: 0; }
+.sw-btn { width: 72px; height: 100%; color: #fff; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: var(--c); }
+.sw-btn svg { width: 20px; height: 20px; }
+.row.leaving { pointer-events: none; }
+.row.leaving .row-title { color: var(--fg2); transition: color .2s; }
+/* 一覧を開いたとき、行が上から順にふわっと並ぶ */
+.stagger > * { animation: rise .5s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 32ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+/* 送信: 矢印が上へ飛んでいき、下から戻ってくる */
+.send.launch svg { animation: launch .5s var(--ease-out); }
+@keyframes launch { 0% { transform: none; } 40% { transform: translateY(-26px); opacity: 0; } 41% { transform: translateY(18px); opacity: 0; } 100% { transform: none; opacity: 1; } }
+/* シートが開いている間、奥の画面が少し下がって小さくなる（iOS のシートと同じ奥行き） */
+html, :root.sheet-open body { background: #000; }
+.app { transition: transform .5s var(--ease-sheet), border-radius .5s var(--ease-sheet), filter .5s; transform-origin: 50% 100%; }
+:root.sheet-open .app { transform: scale(.93) translateY(calc(env(safe-area-inset-top, 0px) + 6px)); border-radius: 14px; overflow: hidden; filter: brightness(.85); }
+:root.sheet-open.kb .app { transform: none; border-radius: 0; filter: none; }
+/* 会話の返事は「…」と入力中を見せてから出る */
+.bub.bot.pop .tx { position: relative; }
+.bub.bot.pop .tx::after { content: ""; position: absolute; inset: 0; border-radius: inherit; animation: typing .55s steps(1) forwards;
+  background: radial-gradient(circle, var(--fg2) 3.5px, transparent 4px) 12px 50% / 10px 10px no-repeat, radial-gradient(circle, var(--fg2) 3.5px, transparent 4px) 26px 50% / 10px 10px no-repeat, radial-gradient(circle, var(--fg2) 3.5px, transparent 4px) 40px 50% / 10px 10px no-repeat, var(--card); }
+@keyframes typing { 0%, 99% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+.row.flash { animation: rowFlash 1.4s var(--ease-out); border-radius: 10px; }
+@keyframes rowFlash { 0%, 30% { background: color-mix(in srgb, var(--blue) 14%, transparent); } 100% { background: transparent; } }
+.switch::after { transition: transform .4s var(--spring), width .2s; }
+.switch:active::after { width: 33px; }
+.switch:checked:active::after { transform: translateX(14px); }
+
+/* 画面遷移: 右から重なって入り、戻るときは右へ抜ける（ui-ux-pro-max: continuity / hierarchy-motion） */
+::view-transition-old(page), ::view-transition-new(page) { animation-duration: .46s; animation-timing-function: var(--ease-sheet); }
+:root[data-nav="fwd"]::view-transition-old(page) { animation-name: pageOutL; }
+:root[data-nav="fwd"]::view-transition-new(page) { animation-name: pageInR; box-shadow: var(--page-edge); }
+:root[data-nav="back"]::view-transition-old(page) { animation-name: pageOutR; z-index: 1; box-shadow: var(--page-edge); }
+/* 前の画面の上に今の画面が乗っていることを、端の線と影で見せる。ダークでは線を明るく、下の画面を少し明るい灰色にする */
+:root { --page-edge: -1px 0 0 rgba(0,0,0,.08), -12px 0 28px rgba(0,0,0,.16); --under: #e9e9ee; }
+:root[data-theme="dark"] { --page-edge: -1px 0 0 rgba(255,255,255,.28), -16px 0 32px rgba(0,0,0,.9); --under: #1c1c1e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page-edge: -1px 0 0 rgba(255,255,255,.28), -16px 0 32px rgba(0,0,0,.9); --under: #1c1c1e; } }
+.under { position: absolute; left: 0; right: 0; overflow: hidden; pointer-events: none; background: var(--bg); z-index: 0; --f: 0; }
+/* 前の画面の背景は、指の進み具合 --f に合わせて --under から --bg へじわっと移る */
+.under::before { content: ""; position: absolute; inset: 0; background: var(--under); opacity: calc(1 - var(--f)); }
+.under.anim::before { transition: opacity .24s cubic-bezier(.2,.8,.2,1); }
+.under > .inner { position: relative; }
+.under > .inner { transform-origin: 0 0; opacity: .55; }
+.app.swiping #scroll { position: relative; z-index: 1; box-shadow: var(--page-edge); }
+:root[data-nav="back"]::view-transition-new(page) { animation-name: pageInL; }
+@keyframes pageInR { from { transform: translateX(100%); } }
+@keyframes pageOutL { to { transform: translateX(-28%); opacity: .5; } }
+@keyframes pageInL { from { transform: translateX(-28%); opacity: .5; } }
+@keyframes pageOutR { to { transform: translateX(100%); } }
+
+/* キーボード表示中は下の余白（ホームバー分）を詰める */
+:root.kb .composer, :root.kb .chat-in { padding-bottom: 8px; }
+:root.kb .sheet-b { padding-bottom: 16px; }
+
+/* 視差効果を減らす: 動きは止め、色と透明度の変化だけ残す（画面遷移はクロスフェード） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-property: opacity, background-color, color, border-color, filter, box-shadow !important; }
+  .is-pressed { transform: none !important; opacity: .6; }
+  .bub.bot.pop .tx::after { display: none; }
+  :root.sheet-open .app { transform: none; border-radius: 0; } }
 </style>
 
 <div class="app" id="app">
@@ -263,7 +430,7 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
     <div class="urlrow" id="urlRow" hidden><span class="lab">通知から開く</span><input id="quickUrl" type="url" inputmode="url" placeholder="https://…（任意）" aria-label="通知をタップしたときに開くURL"></div>
     <form class="qform" id="qform" autocomplete="off" novalidate>
       <button type="button" class="linkbtn" id="linkBtn" aria-pressed="false" aria-label="URLを付ける"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg></button>
-      <input id="quick" type="text" enterkeyhint="send" placeholder="何をリマインドしますか？（例: 明日9時に資料送る）" aria-label="話し言葉でリマインダーを追加">
+      <input id="quick" type="text" enterkeyhint="send" placeholder="例: 明日9時に資料送る" aria-label="話し言葉でリマインダーを追加">
       <button class="send" id="sendBtn" type="submit" aria-label="追加" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
     </form>
   </div>
@@ -379,6 +546,7 @@ function sortRems(arr) {
 
 // ---- 描画 ----
 function render() {
+  swOpen = null;
   const sc = $('#scroll');
   const back = $('#backBtn'), nt = $('#navTitle');
   if (view.name === 'home') {
@@ -395,16 +563,190 @@ function render() {
     sc.onscroll = () => nt.classList.toggle('show', sc.scrollTop > 40);
   }
 }
+// 画面遷移。View Transitions があれば iOS のように重ねてスライドし、なければ新しい画面だけ滑り込ませる
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+let homeScroll = 0;
+function navigate(v, dir, opts = {}) {
+  const sc = $('#scroll');
+  if (dir === 'fwd' && view.name === 'home') homeScroll = sc.scrollTop;
+  const swap = () => { view = v; render(); sc.scrollTop = dir === 'back' ? homeScroll : 0; if (dir === 'fwd') staggerIn(sc); };
+  if (reduceMotion()) return document.startViewTransition ? void document.startViewTransition(swap) : swap();
+  if (document.startViewTransition && !opts.noVT) {
+    const root = document.documentElement;
+    root.dataset.nav = dir;
+    const t = document.startViewTransition(swap);
+    t.finished.finally(() => { if (root.dataset.nav === dir) delete root.dataset.nav; });
+    return;
+  }
+  swap();
+  sc.animate(dir === 'back' ? [{ transform: 'translateX(-28%)', opacity: .5 }, { transform: 'none', opacity: 1 }] : [{ transform: 'translateX(40%)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+    { duration: 420, easing: 'cubic-bezier(.32,.72,0,1)' });
+}
+// 戻るスワイプ中に下へ敷く前の画面。id は重複しないよう外す
+function makeUnder() {
+  const sc = $('#scroll'), app = $('#app');
+  const u = document.createElement('div'); u.className = 'under gut';
+  u.style.top = sc.offsetTop + 'px'; u.style.height = sc.offsetHeight + 'px';
+  u.innerHTML = `<div class="inner">${renderHome().replace(/ id="/g, ' data-x="')}</div>`;
+  app.insertBefore(u, sc); app.classList.add('swiping');
+  u.firstChild.style.marginTop = -homeScroll + 'px';
+  moveUnder(u, 0, false);
+  return u;
+}
+function moveUnder(u, f, anim) {
+  if (!u) return; const i = u.firstChild;
+  i.style.transition = anim ? 'transform .24s cubic-bezier(.2,.8,.2,1), opacity .24s cubic-bezier(.2,.8,.2,1)' : 'none';
+  // 変化を指の動きに対してなめらかにする（始めはゆっくり、終わりに向けて追いつく）
+  const e = f * f * (3 - 2 * f);
+  u.classList.toggle('anim', !!anim); u.style.setProperty('--f', e.toFixed(3));
+  i.style.transform = `translateX(${(-28 * (1 - f)).toFixed(2)}%)`; i.style.opacity = (.55 + .45 * e).toFixed(3);
+}
+function dropUnder(u) { if (u) u.remove(); $('#app').classList.remove('swiping'); }
+// 左端からのスワイプで戻る（指に追従し、離した位置と速さで戻るか決める）
+(() => {
+  const sc = $('#scroll'); let sw = null;
+  sc.addEventListener('touchstart', e => {
+    if (view.name === 'home' || e.touches.length > 1) return;
+    const t = e.touches[0]; if (t.clientX - sc.getBoundingClientRect().left > 28) return;
+    sw = { x: t.clientX, y: t.clientY, t: performance.now(), dx: 0, on: false };
+  }, { passive: true });
+  sc.addEventListener('touchmove', e => {
+    if (!sw) return;
+    const t = e.touches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y;
+    if (!sw.on) { if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) { sw = null; return; } if (dx > 8) { sw.on = true; sw.under = makeUnder(); } else return; }
+    sw.dx = Math.max(0, dx);
+    sc.style.transition = 'none'; sc.style.transform = `translateX(${sw.dx}px)`;
+    moveUnder(sw.under, sw.dx / sc.clientWidth, false);
+  }, { passive: true });
+  const end = () => {
+    if (!sw) return; const s = sw; sw = null; if (!s.on) return;
+    const v = s.dx / Math.max(1, performance.now() - s.t);
+    if (s.dx > sc.clientWidth * .35 || v > .5) {
+      sc.style.transition = 'transform .24s cubic-bezier(.2,.8,.2,1)'; sc.style.transform = 'translateX(100%)'; moveUnder(s.under, 1, true);
+      setTimeout(() => { sc.style.transition = ''; sc.style.transform = ''; dropUnder(s.under); view = { name: 'home' }; render(); sc.scrollTop = homeScroll; }, 250);
+    } else {
+      sc.style.transition = 'transform .45s cubic-bezier(.34,1.45,.64,1)'; sc.style.transform = ''; moveUnder(s.under, 0, true);
+      setTimeout(() => { sc.style.transition = ''; dropUnder(s.under); }, 460);
+    }
+  };
+  sc.addEventListener('touchend', end); sc.addEventListener('touchcancel', end);
+})();
+// 触覚フィードバック。Android は vibrate、iOS 18 以降の Safari はスイッチ型チェックボックスの切り替えで軽く震える
+// 押した感触: 指が触れた瞬間に縮め、離すと少し膨らんで戻す。速いタップでも最低 100ms は見せる
+const PRESS_SEL = '.nl-ok, .pill, .sw-btn, .newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .navbtn, .lrow, .btn, .row-main, .check';
+const BOUNCE_SEL = '.pill, .navbtn, .addlist, .seg button, .newbtn, .send, .linkbtn, .tile, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .wd button, .colors button, .nl-ok';
+(() => {
+  let cur = null, t0 = 0, sx = 0, sy = 0;
+  const release = (bounce) => {
+    if (!cur) return; const el = cur; cur = null;
+    setTimeout(() => {
+      el.classList.remove('is-pressed');
+      if (bounce && el.matches(BOUNCE_SEL) && !el.disabled && !reduceMotion()) { el.classList.remove('released'); el.offsetWidth; el.classList.add('released'); setTimeout(() => el.classList.remove('released'), 450); }
+    }, Math.max(0, 100 - (performance.now() - t0)));
+  };
+  document.addEventListener('pointerdown', e => {
+    const el = e.target.closest(PRESS_SEL); if (!el || el.disabled) return;
+    cur = el; t0 = performance.now(); sx = e.clientX; sy = e.clientY; el.classList.add('is-pressed');
+  }, { passive: true });
+  document.addEventListener('pointermove', e => { if (cur && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { cur.classList.remove('is-pressed'); cur = null; } }, { passive: true });
+  document.addEventListener('pointerup', () => release(true), { passive: true });
+  document.addEventListener('pointercancel', () => release(false), { passive: true });
+})();
+// 行のスワイプ（右: 完了・左: 1時間後/フラグ/削除）。縦のスクロールと区別し、左端は「戻る」用に空けておく
+let swOpen = null, swClickBlock = 0;
+function closeSwipe(anim = true) {
+  if (!swOpen) return; const { wrap, row } = swOpen; swOpen = null;
+  row.classList.toggle('settle', anim); row.style.transform = '';
+  setTimeout(() => { row.classList.remove('settle'); if (!swOpen || swOpen.wrap !== wrap) delete wrap.dataset.dir; }, 500);
+}
+(() => {
+  const sc = $('#scroll'); let g = null;
+  sc.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const wrap = e.target.closest('.swipe'); const row = wrap && wrap.querySelector(':scope > .row');
+    if (swOpen && (!wrap || swOpen.wrap !== wrap || !e.target.closest('.sw-btn'))) { if (!e.target.closest('.sw-btn')) { closeSwipe(); swClickBlock = performance.now(); } }
+    if (!row || e.target.closest('.sw-btn') || e.clientX - sc.getBoundingClientRect().left < 28) return;
+    g = { wrap, row, x: e.clientX, y: e.clientY, dx: 0, on: false, base: 0, w: wrap.offsetWidth, rw: wrap.querySelector('.sw-r').offsetWidth || 216, t: performance.now() };
+  });
+  sc.addEventListener('pointermove', e => {
+    if (!g) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { g = null; return; }
+      if (Math.abs(dx) < 12) return;
+      g.on = true; document.querySelectorAll('.is-pressed').forEach(x => x.classList.remove('is-pressed'));
+    }
+    let x = dx;
+    if (x < -g.rw) x = -g.rw + (x + g.rw) / 3;             // 左は操作ボタンの幅を超えると重くなる
+    if (x > g.w * .5) x = g.w * .5 + (x - g.w * .5) / 3;      // 右は半分を超えると重くなる
+    g.dx = x;
+    g.wrap.dataset.dir = x > 0 ? 'r' : 'l';
+    g.wrap.classList.toggle('armed', x > Math.min(110, g.w * .3));
+    g.row.classList.remove('settle'); g.row.style.transform = `translateX(${x}px)`;
+  });
+  const end = () => {
+    if (!g) return; const s = g; g = null; if (!s.on) return;
+    swClickBlock = performance.now();
+    const v = s.dx / Math.max(1, performance.now() - s.t);
+    if (s.wrap.classList.contains('armed')) {
+      s.wrap.classList.remove('armed');
+      s.row.classList.add('settle'); s.row.style.transform = '';
+      setTimeout(() => { delete s.wrap.dataset.dir; s.row.querySelector('.check')?.click(); }, 180);
+    } else if (s.dx < -s.rw * .4 || v < -.5) {
+      s.row.classList.add('settle'); s.row.style.transform = `translateX(${-s.rw}px)`;
+      swOpen = { wrap: s.wrap, row: s.row };
+    } else { swOpen = { wrap: s.wrap, row: s.row }; closeSwipe(); }
+  };
+  sc.addEventListener('pointerup', end); sc.addEventListener('pointercancel', () => { if (g && g.on) end(); else g = null; });
+  // スワイプ直後のクリック（詳細が開くなど）は無視する
+  sc.addEventListener('click', e => { if (performance.now() - swClickBlock < 350 && !e.target.closest('.sw-btn')) { e.stopPropagation(); e.preventDefault(); } }, true);
+  sc.addEventListener('click', e => {
+    const b = e.target.closest('.sw-btn'); if (!b) return;
+    const wrap = b.closest('.swipe'); const r = S.reminders.find(x => x.id === wrap.dataset.sw); if (!r) return;
+    const a = b.dataset.swa;
+    if (a === 'flag') { r.flagged = !r.flagged; save(); swOpen = null; render(); toast(r.flagged ? `「${esc(r.title)}」にフラグを付けました` : 'フラグを外しました'); }
+    else if (a === 'later') { const msg = snooze(r, 60); swOpen = null; render(); toast(esc(msg)); }
+    else if (a === 'del') {
+      const idx = S.reminders.indexOf(r); swOpen = null;
+      const h = wrap.offsetHeight;
+      const doDel = () => { S.reminders.splice(S.reminders.indexOf(r), 1); save(); render(); deleted = { r, idx }; toast(`「${esc(r.title)}」を削除しました<button class="undo" data-restore="1">取り消す</button>`, 5000); };
+      if (reduceMotion()) return doDel();
+      wrap.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 300, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+      setTimeout(doDel, 300);
+    }
+  });
+})();
+let deleted = null;
+// 一覧の行を上から順に並べる
+function staggerIn(root) {
+  if (reduceMotion()) return;
+  const els = [...root.querySelectorAll('.large, .day-h, .swipe, .foot-note, .empty')].slice(0, 16);
+  els.forEach((el, i) => { el.style.setProperty('--i', i); el.parentElement.classList.add('stagger'); });
+  setTimeout(() => { root.querySelectorAll('.stagger').forEach(x => x.classList.remove('stagger')); }, 1100);
+}
+// 登録した行を一瞬光らせて、どこに入ったか分かるようにする
+function celebrate(id) {
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`.row[data-id="${id}"]`); if (!el) return;
+    el.classList.add('flash');
+    if (!reduceMotion()) el.animate([{ opacity: 0, transform: 'translateY(-12px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 500, easing: 'cubic-bezier(.34,1.45,.64,1)' });
+    el.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+  });
+}
+// ホーム: 日付と大見出し、よく使う4つのタイル、その他は小さなチップ、リスト。説明文は最小限に
 function renderHome() {
-  const keys = ['today', 'scheduled', 'all', 'flagged', 'repeat', 'completed'];
-  const tiles = keys.map(k => { const m = SMART[k];
-    return `<button class="tile" data-smart="${k}" style="--c:var(--${m.color})"><span class="ic">${m.icon}</span><span class="num">${S.reminders.filter(m.filter).length}</span><span class="lbl">${m.name}</span></button>`; }).join('');
+  const now = new Date();
+  const tile = k => { const m = SMART[k];
+    return `<button class="tile" data-smart="${k}" style="--c:var(--${m.color})"><span class="ic">${m.icon}</span><span class="num">${S.reminders.filter(m.filter).length}</span><span class="lbl">${m.name}</span></button>`; };
+  const pill = k => { const m = SMART[k];
+    return `<button class="pill" data-smart="${k}" style="--c:var(--${m.color})"><span class="pdot">${m.icon}</span>${m.name}<span class="pn">${S.reminders.filter(m.filter).length}</span></button>`; };
   const lists = S.lists.map(l => `<button class="lrow" data-list="${l.id}" style="--c:var(--${l.color})"><span class="dot">${I.list}</span><span class="name">${esc(l.name)}</span><span class="cnt">${S.reminders.filter(r => !r.done && r.list === l.id).length}</span>${I.chev}</button>`).join('');
-  return `<div class="search">${I.search}<input id="searchIn" type="search" placeholder="検索" aria-label="リマインダーを検索"></div>
-    <div id="homeBody"><div class="grid">${tiles}</div>
-    <h2 class="sec-h">マイリスト</h2><div class="group">${lists}</div>
-    <button class="addlist" id="addListBtn">リストを追加</button>
-    ${S.sampleData ? '<p class="hint">いま表示しているのはサンプルです。右上のフォルダから JSON ファイルを読み込むと、自分のデータに置き換えられます。</p>' : ''}</div>
+  return `<div class="home-h"><div class="eyebrow">${now.getMonth() + 1}月${now.getDate()}日 ${WD[now.getDay()]}曜日</div><h1 class="large home-t">RE<span class="c">:</span>main</h1></div>
+    <div class="search">${I.search}<input id="searchIn" type="search" placeholder="検索" aria-label="リマインダーを検索"></div>
+    <div id="homeBody"><div class="grid">${['today', 'scheduled', 'all', 'flagged'].map(tile).join('')}</div>
+    <div class="pills">${['repeat', 'completed'].map(pill).join('')}</div>
+    <div class="sec-row"><h2 class="sec-h">マイリスト</h2><button class="addlist" id="addListBtn" aria-label="リストを追加"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="group">${lists}</div>
+    ${S.sampleData ? '<p class="hint">サンプルを表示中。右上の <b>フォルダ</b> から自分のデータを読み込めます。</p>' : ''}</div>
     <div id="searchBody" hidden></div>`;
 }
 function renderSearchResults() {
@@ -452,13 +794,26 @@ function rowHtml(r) {
   if (r.url) subs.push(`<a class="rlink" href="${esc(r.url)}" target="_blank" rel="noopener">${I.link}${esc(hostOf(r.url))}</a>`);
   if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
   const pr = r.priority ? `<span class="prio">${'!'.repeat(r.priority)}</span>` : '';
-  return `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
+  return swipeWrap(r, `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
     <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '完了にする'}"></button>
     <button class="row-main" data-open="${r.id}"><div class="row-title">${pr}${esc(r.title)}</div>
     ${subs.length ? `<div class="row-sub">${subs.join('')}</div>` : ''}${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
-    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`;
+    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`);
 }
 
+// スワイプで出す操作。ボタンでも同じことができる（詳細画面）ので、スワイプは近道
+const SWI = {
+  done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
+  later: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h2v18H5zM8 4h10l-2.5 4L18 12H8z"/></svg>',
+  del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+};
+function swipeWrap(r, rowHtml) {
+  const btns = [!r.done && !isGroup(r) ? ['later', '1時間後', 'indigo'] : null, ['flag', r.flagged ? 'フラグ解除' : 'フラグ', 'orange'], ['del', '削除', 'red']].filter(Boolean);
+  return `<div class="swipe" data-sw="${r.id}"><div class="sw-l" aria-hidden="true">${r.done ? SWI.undo + '未完了に戻す' : SWI.done + '完了'}</div>
+    <div class="sw-r">${btns.map(([a, l, c]) => `<button class="sw-btn" data-swa="${a}" style="--c:var(--${c})" tabindex="-1">${SWI[a]}${l}</button>`).join('')}</div>${rowHtml}</div>`;
+}
 function groupRowHtml(r) {
   const now = new Date();
   const ts = stepTimes(r), nx = nextStep(r);
@@ -472,11 +827,11 @@ function groupRowHtml(r) {
   if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
   const MAX = 6;
   const chips = r.steps.slice(0, MAX).map((st, i) => `<span class="gs ${st.done ? 'done' : nx && nx.i === i ? 'next' : ''}">${esc(hm(ts[i]))} ${esc(st.title)}</span>`).join('') + (r.steps.length > MAX ? `<span class="gs">ほか${r.steps.length - MAX}件</span>` : '');
-  return `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
+  return swipeWrap(r, `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
     <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '次の項目を完了にする'}"></button>
     <button class="row-main" data-open="${r.id}"><div class="row-title">${esc(r.title)}</div>
     <div class="row-sub">${subs.join('')}</div><div class="gsteps">${chips}</div>${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
-    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`;
+    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`);
 }
 function completeStep(r, i) {
   const st = r.steps[i]; if (!st) return '';
@@ -511,17 +866,27 @@ function snooze(r, mins) {
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-smart],[data-list],[data-check],[data-open],#backBtn,#addListBtn,#editListBtn,#helpBtn,#dataBtn,.ex');
   if (!t) return;
-  if (t.dataset.smart) { view = { name: 'list', smart: t.dataset.smart }; render(); $('#scroll').scrollTop = 0; }
-  else if (t.dataset.list) { view = { name: 'list', list: t.dataset.list }; render(); $('#scroll').scrollTop = 0; }
+  if (t.dataset.smart) navigate({ name: 'list', smart: t.dataset.smart }, 'fwd');
+  else if (t.dataset.list) navigate({ name: 'list', list: t.dataset.list }, 'fwd');
   else if (t.dataset.check) {
     const r = S.reminders.find(x => x.id === t.dataset.check); if (!r) return;
     if (r.done) { r.done = false; r.doneAt = null; if (isGroup(r)) r.steps.forEach(x => { x.done = false; x.lastNotified = null; }); save(); render(); return; }
     t.classList.add('on');
-    if (isGroup(r)) { setTimeout(() => { const nx = nextStep(r); if (nx) toast(esc(completeStep(r, nx.i))); render(); }, 380); return; }
-    setTimeout(() => { const msg = completeRem(r); toast(`「${esc(r.title)}」${msg}`); render(); }, 380);
+    // 完了で一覧から消えるものは、チェックが描かれた後に右へ抜け、行の高さが縮んで詰まる
+    const row = t.closest('.swipe') || t.closest('.row');
+    const leaves = !isGroup(r) && !r.rule && !reduceMotion() && row;
+    if (leaves) setTimeout(() => {
+      row.classList.add('leaving'); row.querySelector('.row')?.classList.add('leaving');
+      const h = row.offsetHeight;
+      row.animate([{ opacity: 1, transform: 'none', height: h + 'px' }, { opacity: 0, transform: 'translateX(40px)', height: h + 'px', offset: .5 }, { opacity: 0, transform: 'translateX(40px)', height: '0px', paddingTop: '0px', paddingBottom: '0px' }],
+        { duration: 420, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    }, 420);
+    const wait = leaves ? 860 : 520;
+    if (isGroup(r)) { setTimeout(() => { const nx = nextStep(r); if (nx) toast(esc(completeStep(r, nx.i))); render(); }, wait); return; }
+    setTimeout(() => { const msg = completeRem(r); toast(`「${esc(r.title)}」${msg}`); render(); }, wait);
   }
   else if (t.dataset.open) { const r = S.reminders.find(x => x.id === t.dataset.open); if (r && isGroup(r)) openGroupEditor(r.id); else openDetail(t.dataset.open); }
-  else if (t.id === 'backBtn') { view = { name: 'home' }; render(); }
+  else if (t.id === 'backBtn') navigate({ name: 'home' }, 'back');
   else if (t.id === 'addListBtn') openListEditor(null);
   else if (t.id === 'editListBtn') openListEditor(view.list);
   else if (t.id === 'helpBtn') openHelp();
@@ -530,7 +895,7 @@ document.addEventListener('click', e => {
 });
 
 // ---- 自然文入力（リマインくん式） ----
-const EXAMPLES = ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', '隔週火曜 7:30 燃えないゴミ', '偶数日 7時 水やり', '毎日8時と20時 薬 確実に', '平日8時 出社 祝日除く', '毎月第2火曜10時 定例', '毎月末 家計簿', '完了から1ヶ月後 歯ブラシ交換', '3日ごと 21時 ストレッチ', '寝る前に歯ブラシ持ってく'];
+const EXAMPLES = ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', '隔週火曜 7:30 燃えないゴミ', '偶数日 7時 水やり', '毎日8時と20時 薬 確実に', '平日8時 出社 祝日除く', '毎月第2火曜10時 定例', '毎月末 家計簿', '毎月末 土日祝NG 18時 経費精算', '毎月25日 土日祝なら前の平日 給料日', '完了から1ヶ月後 歯ブラシ交換', '3日ごと 21時 ストレッチ', '寝る前に歯ブラシ持ってく'];
 $('#examples').innerHTML = EXAMPLES.map(x => `<button type="button" class="ex" data-ex="${esc(x)}">${esc(x)}</button>`).join('');
 function interpretation(p, url) {
   const chips = [];
@@ -553,14 +918,24 @@ function updatePreview() {
   const url = normUrl($('#quickUrl').value) || normUrl(p.url);
   pv.hidden = false;
   // 日時が読み取れないときは、リマインくんのように聞き返す代わりにワンタップの候補を出す
-  const ask = !p.due ? `<div class="pv-ask">いつ通知する？${QUICK_WHEN.map(([l, t]) => `<button type="button" data-append="${esc(t)}">${esc(l)}</button>`).join('')}</div>` : '';
-  pv.innerHTML = `<div class="pv-title">${esc(p.title)}</div><div class="chips">${interpretation(p, url)}</div>${ask}${p.notes.length ? `<div class="pv-note">${esc(p.notes.filter(n => n !== '相対時刻').join(' / '))}</div>` : ''}`;
+  pv.innerHTML = `<div class="pv-title">${esc(p.title)}</div><div class="chips">${interpretation(p, url)}</div>${p.notes.length ? `<div class="pv-note">${esc(p.notes.filter(n => n !== '相対時刻').join(' / '))}</div>` : ''}`;
 }
-const QUICK_WHEN = [['30分後', '30分後'], ['1時間後', '1時間後'], ['今夜', '今夜20時'], ['明日の朝', '明日 朝8時'], ['週末', '週末 10時']];
-$('#preview').addEventListener('click', e => {
-  const b = e.target.closest('[data-append]'); if (!b) return;
-  const q = $('#quick'); q.value = b.dataset.append + ' ' + q.value.trim(); updatePreview(); q.focus();
-});
+// 通知時間の候補。今日の時刻は過ぎたものを出さない
+function whenGroups(now = new Date()) {
+  const h = now.getHours(), WDN = '日月火水木金土';
+  const today = [[12, '今日 12時'], [15, '今日 15時'], [18, '今日 18時'], [21, '今日 21時']].filter(([t]) => t > h).map(([, t]) => [t.replace('今日 ', '').replace('時', ':00'), t]);
+  if (h < 23) today.splice(Math.max(0, today.length - 1), 0, ['今夜', '今夜']);
+  const wk = [now.getDay() === 6 || now.getDay() === 0 ? null : ['週末', '週末 10時'], ['月曜 9:00', '月曜 9時'], ['金曜 18:00', '金曜 18時'], ['土曜 10:00', '土曜 10時']].filter(Boolean);
+  if (now.getDay() !== 0 && now.getDay() !== 6) wk.push(['日曜 10:00', '日曜 10時']);
+  return [
+    ['すぐ', [['10分後', '10分後'], ['30分後', '30分後'], ['1時間後', '1時間後'], ['2時間後', '2時間後'], ['3時間後', '3時間後']]],
+    ['今日', today],
+    ['明日', [['7:00', '明日 朝7時'], ['8:00', '明日 朝8時'], ['9:00', '明日 9時'], ['12:00', '明日 12時'], ['18:00', '明日 18時'], ['21:00', '明日 21時']]],
+    ['今週・来週', wk.filter(([l]) => !l.startsWith(WDN[now.getDay()]))],
+    ['くり返し', [['毎朝 7:00', '毎日 朝7時'], ['毎朝 8:00', '毎日 朝8時'], ['毎晩 21:00', '毎日 21時'], ['1日おき 8:00', '1日おき 8時'], ['2日おき 8:00', '2日おき 8時'], ['平日 8:00', '平日 8時'], ['毎週月曜 9:00', '毎週月曜 9時'], ['隔週月曜 9:00', '隔週月曜 9時'], ['毎月1日 9:00', '毎月1日 9時'], ['毎月末 9:00', '毎月末 9時'], ['月末の平日 9:00', '毎月末 土日祝NG 9時']]],
+  ].filter(([, a]) => a.length);
+}
+const whenChips = (attr, now) => whenGroups(now).map(([g, a]) => `<div class="wg"><span class="wg-h">${g}</span>${a.map(([l, t]) => `<button type="button" ${attr}="${esc(t)}">${esc(l)}</button>`).join('')}</div>`).join('');
 $('#quick').addEventListener('input', updatePreview);
 $('#quickUrl').addEventListener('input', () => { $('#linkBtn').classList.toggle('has', !!$('#quickUrl').value.trim()); updatePreview(); });
 $('#linkBtn').addEventListener('click', () => {
@@ -577,6 +952,7 @@ $('#quick').addEventListener('paste', e => {
 $('#qform').addEventListener('submit', e => {
   e.preventDefault();
   const v = $('#quick').value.trim(); if (!v) return;
+  if (!reduceMotion()) { const sb = $('#sendBtn'); sb.classList.remove('launch'); sb.offsetWidth; sb.classList.add('launch'); setTimeout(() => sb.classList.remove('launch'), 520); }
   const listId = view.list || 'inbox';
   const extra = view.smart === 'flagged' ? { flagged: true } : {};
   const fieldUrl = normUrl($('#quickUrl').value);
@@ -594,8 +970,9 @@ $('#qform').addEventListener('submit', e => {
 const quickMode = () => !!(S.settings && S.settings.quickAdd);
 function updateModeLbl() { $('#modeLbl').textContent = quickMode() ? 'すぐ登録モード' : ''; }
 function registeredToast(r) {
+  celebrate(r.id);
   const when = r.due ? `次回は ${fmtDue(parseLocal(r.due))} です${r.rule ? `（↻ ${describeRule(r.rule)}）` : ''}` : '日時なしで追加しました';
-  toast(`<div class="bot"><b>り</b><div>「${esc(r.title)}」を登録しました。${esc(when)}${r.nag ? `。完了するまで${r.nag.every}分ごとに再通知します` : ''}${r.url ? `。通知をタップすると ${esc(hostOf(r.url))} を開きます` : ''}<button class="undo" data-undo="${r.id}">取り消す</button></div></div>`, 5000);
+  toast(`<div class="bot"><b>R</b><div>「${esc(r.title)}」を登録しました。${esc(when)}${r.nag ? `。完了するまで${r.nag.every}分ごとに再通知します` : ''}${r.url ? `。通知をタップすると ${esc(hostOf(r.url))} を開きます` : ''}<button class="undo" data-undo="${r.id}">取り消す</button></div></div>`, 5000);
 }
 $('#newBtn').addEventListener('click', () => {
   const v = $('#quick').value.trim();
@@ -629,7 +1006,7 @@ function wizardMe(text) { W.log.push({ who: 'me', text }); drawChat(); }
 function drawChat() {
   const c = document.querySelector('#wChat'); if (!c) return;
   c.innerHTML = W.log.map((m, i) => m.who === 'bot'
-    ? `<div class="bub bot ${i === W.log.length - 1 ? 'pop' : ''}"><span class="av">り</span><div class="tx">${esc(m.text)}${m.sub ? `<span class="sub">${esc(m.sub)}</span>` : ''}</div></div>`
+    ? `<div class="bub bot ${i === W.log.length - 1 ? 'pop' : ''}"><span class="av">R</span><div class="tx">${esc(m.text)}${m.sub ? `<span class="sub">${esc(m.sub)}</span>` : ''}</div></div>`
     : `<div class="bub me ${i === W.log.length - 1 ? 'pop' : ''}"><div class="tx">${esc(m.text)}</div></div>`).join('');
   c.scrollTop = c.scrollHeight;
 }
@@ -638,12 +1015,13 @@ function wizardPrompt() {
   if (!inp) return;
   const idx = Math.max(0, STEP_ORDER.indexOf(W.step));
   document.querySelector('#wSteps').innerHTML = STEP_ORDER.map((_, i) => `<i class="${i <= idx ? 'on' : ''}"></i>`).join('') + '<i></i>';
-  inp.value = '';
+  inp.value = ''; chips.classList.remove('when'); chips.scrollTop = 0;
   if (W.step === 'what') {
     inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の件、資料を送る'; next.textContent = '次へ'; chips.innerHTML = '';
   } else if (W.step === 'when') {
     inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の9時、毎週月曜8時、30分後'; next.textContent = '次へ';
-    chips.innerHTML = (W.sugg ? `<button type="button" data-ans="__sugg">${esc(whenText(W.sugg.due, W.sugg.rule))}</button>` : '') + [...QUICK_WHEN, ['毎日 朝8時', '毎日 朝8時'], ['平日 8時', '平日 8時']].map(([l, t]) => `<button type="button" data-ans="${esc(t)}">${esc(l)}</button>`).join('') + '<button type="button" class="skip" data-ans="__none">日時なし</button>';
+    chips.innerHTML = (W.sugg ? `<div class="wg"><span class="wg-h">入力から読み取った日時</span><button type="button" class="sugg" data-ans="__sugg">${esc(whenText(W.sugg.due, W.sugg.rule))}</button></div>` : '') + whenChips('data-ans') + '<div class="wg"><button type="button" class="skip" data-ans="__none">日時なし</button></div>';
+    chips.classList.add('when');
   } else if (W.step === 'url') {
     inp.type = 'text'; inp.inputMode = 'url'; inp.autocapitalize = 'off'; inp.placeholder = 'https://…（なければ「なし」）'; next.textContent = '次へ';
     chips.innerHTML = (W.surl ? `<button type="button" data-ans="__surl">${esc(hostOf(W.surl))}</button>` : '') + '<button type="button" class="skip" data-ans="">なし</button>';
@@ -679,6 +1057,7 @@ function wizardAnswer(raw, label) {
     wizardMe(label || v); W.inputs.push(v);
     const p = parseInput(v, now);
     if (!p.due) { wizardBot('ごめんなさい、日時が読み取れませんでした。', '「明日 9時」「来週金曜 15時」「毎月25日」のように書いてみてください'); return wizardPrompt(); }
+    if (p.due < now) { wizardBot(`${fmtDue(p.due)} はもう過ぎています。`, '「明日」を付けるか、これからの時刻を入力してください'); return wizardPrompt(); }
     W.due = p.due; W.rule = p.rule; if (p.nag) W.nag = p.nag; if (p.url && !W.surl) W.surl = normUrl(p.url);
     wizardBot(`${whenText(p.due, p.rule)} ですね。`, p.notes.filter(n => n !== '相対時刻').join(' / ') || null);
     return askUrl();
@@ -731,26 +1110,168 @@ function openWizardFrom(w) {
 // ---- トースト ----
 let toastTimer;
 $('#toast').addEventListener('click', e => {
+  if (e.target.closest('[data-restore]') && deleted) { S.reminders.splice(Math.min(deleted.idx, S.reminders.length), 0, deleted.r); const id = deleted.r.id; deleted = null; save(); render(); celebrate(id); toast('元に戻しました'); return; }
   const b = e.target.closest('[data-undo]'); if (!b) return;
   S.reminders = S.reminders.filter(x => x.id !== b.dataset.undo); save(); render(); toast('取り消しました');
 });
 function toast(html, ms = 2600) {
-  const t = $('#toast'); t.innerHTML = html; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  const t = $('#toast'); t.innerHTML = html;
+  if (t.hidden || t.classList.contains('out')) { t.classList.remove('out'); t.hidden = false; t.style.animation = 'none'; t.offsetHeight; t.style.animation = ''; }
+  else if (!reduceMotion()) t.animate([{ transform: 'translateX(-50%) scale(.96)' }, { transform: 'translateX(-50%) scale(1)' }], { duration: 400, easing: 'cubic-bezier(.34,1.45,.64,1)' });
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.add('out'); toastTimer = setTimeout(() => { t.hidden = true; t.classList.remove('out'); }, 220); }, ms);
 }
 
 // ---- シート共通 ----
+// 開くときは下からばねで、閉じるときは短く落とす。閉じる途中で別のシートを開いたら、閉じる処理は取り消す
+let sheetCloseT = null;
 function openSheet(html, onMount) {
   const w = $('#sheetWrap'), s = $('#sheet');
+  if (sheetCloseT) { clearTimeout(sheetCloseT); sheetCloseT = null; w.classList.remove('closing'); s.classList.remove('tall'); s.style.transform = ''; s.style.animation = 'none'; s.offsetHeight; s.style.animation = ''; }
   s.innerHTML = html; w.hidden = false;
+  document.documentElement.classList.add('sheet-open');
   w.onclick = e => { if (e.target === w) closeSheet(); };
   onMount && onMount(s);
 }
-function closeSheet() { $('#sheetWrap').hidden = true; $('#sheet').innerHTML = ''; $('#sheet').classList.remove('tall'); }
+function closeSheet() {
+  const w = $('#sheetWrap'), s = $('#sheet');
+  const done = () => { sheetCloseT = null; w.hidden = true; w.classList.remove('closing'); s.innerHTML = ''; s.classList.remove('tall', 'dragging', 'settle'); s.style.transform = ''; };
+  if (w.hidden || sheetCloseT) return;
+  document.documentElement.classList.remove('sheet-open');
+  if (reduceMotion()) return done();
+  s.classList.remove('dragging', 'settle');
+  w.classList.add('closing');
+  sheetCloseT = setTimeout(done, 220);
+}
+// シートの上端（タイトル部分）を下に引くと閉じる
+(() => {
+  const s = $('#sheet'); let d = null;
+  s.addEventListener('touchstart', e => {
+    const h = e.target.closest('.sheet-h'); if (!h || e.target.closest('button,input,select,textarea,a')) return;
+    d = { y: e.touches[0].clientY, t: performance.now(), dy: 0 };
+  }, { passive: true });
+  s.addEventListener('touchmove', e => {
+    if (!d) return;
+    const dy = e.touches[0].clientY - d.y;
+    d.dy = dy > 0 ? dy : dy / 4; // 上に引いたときは少しだけ抵抗をつけて動かす
+    s.classList.add('dragging'); s.classList.remove('settle'); s.style.transform = `translateY(${d.dy}px)`;
+  }, { passive: true });
+  const end = () => {
+    if (!d) return; const g = d; d = null;
+    s.classList.remove('dragging');
+    const v = g.dy / Math.max(1, performance.now() - g.t);
+    if (g.dy > 120 || (g.dy > 30 && v > .6)) closeSheet();
+    else { s.classList.add('settle'); s.style.transform = ''; setTimeout(() => s.classList.remove('settle'), 460); }
+  };
+  s.addEventListener('touchend', end); s.addEventListener('touchcancel', end);
+})();
+// キーボードが出ている間は、見えている高さにアプリとシートを合わせる（iOS は画面ごと押し上げて送信ボタンが隠れるため）
+(() => {
+  const vv = window.visualViewport; if (!vv) return;
+  const root = document.documentElement;
+  const fit = () => {
+    const kb = window.innerHeight - vv.height > 120;
+    root.classList.toggle('kb', kb);
+    if (kb) root.style.setProperty('--vvh', vv.height + 'px'); else root.style.removeProperty('--vvh');
+    if (kb && (window.scrollY || vv.offsetTop)) window.scrollTo(0, 0);
+  };
+  vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit);
+  // トーストは入力バーのすぐ上に出す（入力バーの高さはプレビューやキーボードで変わる）
+  const comp = document.querySelector('.composer');
+  if (window.ResizeObserver && comp) new ResizeObserver(() => root.style.setProperty('--composer-h', comp.offsetHeight + 'px')).observe(comp);
+  // iOS では :active を効かせるのにタッチのリスナーが要る
+  document.addEventListener('touchstart', () => {}, { passive: true });
+})();
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheetWrap').hidden) closeSheet(); });
 const sheetHead = (title, right = '完了', left = 'キャンセル') => `<div class="sheet-h gut">${left ? `<button class="navbtn" data-act="cancel">${left}</button>` : '<span></span>'}<div class="t">${title}</div>${right ? `<button class="navbtn r" data-act="ok">${right}</button>` : '<span></span>'}</div>`;
 
 // ---- 詳細編集 ----
+// 繰り返しの間隔の選択肢。「1日おき」は2日ごと（隔日）
+function ivLabel(kind, n) {
+  switch (kind) {
+    case 'daily': return n === 1 ? '毎日' : `${n - 1}日おき（${n}日ごと）`;
+    case 'weekly': return n === 1 ? '毎週' : n === 2 ? '隔週（2週ごと）' : `${n}週ごと`;
+    case 'monthly': case 'monthlyNth': return n === 1 ? '毎月' : `${n}ヶ月ごと`;
+    case 'yearly': return n === 1 ? '毎年' : `${n}年ごと`;
+    case 'hourly': return n === 1 ? '毎時' : `${n}時間ごと`;
+    case 'minutely': return `${n}分ごと`;
+    default: return String(n);
+  }
+}
+function ivOptions(kind, cur) {
+  const max = { daily: 30, weekly: 12, monthly: 12, monthlyNth: 12, yearly: 10, hourly: 24, minutely: 60 }[kind] || 60;
+  const ns = Array.from({ length: max }, (_, i) => i + 1); if (cur > max) ns.push(cur);
+  return ns.map(n => `<option value="${n}" ${n === +cur ? 'selected' : ''}>${ivLabel(kind, n)}</option>`).join('');
+}
+// ---- 詳細条件の組み立て画面（AND / OR / もし〜なら） ----
+const COND_TYPES = [['day', '日の種類'], ['wd', '曜日'], ['mday', '日付の範囲'], ['last', '月末'], ['nth', '第N曜日'], ['month', '月'], ['parity', '偶数日・奇数日'], ['period', '期間']];
+const condDefault = t => ({ day: { v: 'bizday' }, wd: { v: [1] }, mday: { from: 1, to: 10 }, last: { n: 1 }, nth: { n: 1, wd: 1 }, month: { v: [new Date().getMonth() + 1] }, parity: { v: 'even' }, period: { from: ymd(new Date()), to: '' } }[t]);
+function condEditor(c, p) {
+  const o = (v, l, cur) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${l}</option>`;
+  const sel = (k, opts, cur) => `<select data-p="${p}" data-k="${k}">${opts.map(([v, l]) => o(v, l, cur)).join('')}</select>`;
+  const num = (k, v, min, max) => `<input type="number" inputmode="numeric" data-p="${p}" data-k="${k}" min="${min}" max="${max}" value="${v ?? ''}">`;
+  const tog = (vals, labels, cur, cls = '') => `<div class="wd ${cls}">${vals.map((v, i) => `<button type="button" data-p="${p}" data-tog="${v}" aria-pressed="${(cur || []).includes(v)}">${labels[i]}</button>`).join('')}</div>`;
+  let ed = '';
+  switch (c.t) {
+    case 'day': ed = sel('v', [['bizday', '平日（祝日以外）'], ['weekday', '平日（月〜金）'], ['weekend', '土日'], ['holiday', '祝日'], ['offday', '土日祝']], c.v); break;
+    case 'wd': ed = tog([1, 2, 3, 4, 5, 6, 0], ['月', '火', '水', '木', '金', '土', '日'], c.v); break;
+    case 'mday': ed = `${num('from', c.from, 1, 31)}<span class="w">日〜</span>${num('to', c.to, 1, 31)}<span class="w">日</span>`; break;
+    case 'last': ed = `<span class="w">最終日から</span>${num('n', c.n, 1, 15)}<span class="w">日間</span>`; break;
+    case 'nth': ed = sel('n', [[1, '第1'], [2, '第2'], [3, '第3'], [4, '第4'], [5, '第5'], [-1, '最終']], c.n) + sel('wd', [1, 2, 3, 4, 5, 6, 0].map(i => [i, WD[i] + '曜日']), c.wd); break;
+    case 'month': ed = tog([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => m + '月'), c.v, 'mo'); break;
+    case 'parity': ed = sel('v', [['even', '偶数日'], ['odd', '奇数日']], c.v); break;
+    case 'period': ed = `<input type="date" data-p="${p}" data-k="from" value="${c.from || ''}"><span class="w">〜</span><input type="date" data-p="${p}" data-k="to" value="${c.to || ''}">`; break;
+  }
+  return `${sel('t', COND_TYPES, c.t)}${ed}${sel('not', [['', 'のとき'], ['1', '以外のとき']], c.not ? '1' : '')}`;
+}
+function advBuilder(box, adv, onChange) {
+  const at = p => p.split('.').reduce((o, k) => (k === 'c' ? adv.cond : k === 'i' ? adv.ifs : Array.isArray(o) ? o[+k] : o.items ? o.items[+k] : o.cond && k === 'cond' ? o.cond : o[k]), null);
+  const seg = (p, op) => `<div class="seg" role="group"><button type="button" data-op="${p}" data-v="and" aria-pressed="${op !== 'or'}">すべて満たす（AND）</button><button type="button" data-op="${p}" data-v="or" aria-pressed="${op === 'or'}">どれか1つ（OR）</button></div>`;
+  const draw = () => {
+    const rows = adv.cond.items.map((c, i) => c.items
+      ? `<div class="grp"><div class="grp-h">グループ${seg('c.' + i, c.op)}<button type="button" class="x" style="margin:0" data-del="c.${i}" aria-label="グループを削除">×</button></div>
+          ${c.items.map((x, j) => `<div class="cnd">${condEditor(x, `c.${i}.${j}`)}<button type="button" class="x" data-del="c.${i}.${j}" aria-label="条件を削除">×</button></div>`).join('')}
+          <div class="adv-add"><button type="button" data-add="c.${i}">＋ 条件</button></div></div>`
+      : `<div class="cnd">${condEditor(c, 'c.' + i)}<button type="button" class="x" data-del="c.${i}" aria-label="条件を削除">×</button></div>`).join('');
+    const ifs = adv.ifs.map((x, i) => `<div class="ifrow"><div class="cnd"><span class="w">もし</span>${condEditor(x.cond, `i.${i}.cond`)}<button type="button" class="x" data-del="i.${i}" aria-label="削除">×</button></div>
+      <div class="then"><span class="w">なら</span><select data-p="i.${i}" data-k="act">${[['skip', '通知しない'], ['prev', '前の平日にずらす'], ['next', '次の平日にずらす'], ['time', '時刻を変える']].map(([v, l]) => `<option value="${v}" ${x.act === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      ${x.act === 'time' ? `<input type="time" data-p="i.${i}" data-k="time" value="${x.time || '18:00'}">` : ''}</div></div>`).join('');
+    box.innerHTML = `<div class="adv-h">通知する日の条件</div>${adv.cond.items.length > 1 ? seg('c', adv.cond.op) : ''}${rows}
+      <div class="adv-add"><button type="button" data-add="c">＋ 条件</button><button type="button" data-addgrp>＋ グループ（AND/OR の入れ子）</button></div>
+      <div class="adv-h" style="border-top:.5px solid var(--sep)">もし〜なら</div>${ifs}
+      <div class="adv-add"><button type="button" data-addif>＋ もし〜なら</button></div>`;
+  };
+  const changed = () => { draw(); onChange(); };
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.op) { at(b.dataset.op).op = b.dataset.v; changed(); }
+    else if (b.dataset.add) { const g = at(b.dataset.add); g.items.push({ t: 'day', ...condDefault('day') }); changed(); }
+    else if (b.hasAttribute('data-addgrp')) { adv.cond.items.push({ op: 'or', items: [{ t: 'wd', ...condDefault('wd') }, { t: 'last', ...condDefault('last') }] }); changed(); }
+    else if (b.hasAttribute('data-addif')) { adv.ifs.push({ cond: { t: 'day', v: 'holiday' }, act: 'skip' }); changed(); }
+    else if (b.dataset.del) {
+      const ks = b.dataset.del.split('.'), last = +ks.pop(), parent = ks.join('.');
+      if (parent === 'i') adv.ifs.splice(last, 1);
+      else { const g = at(parent); g.items.splice(last, 1); if (parent !== 'c' && !g.items.length) adv.cond.items.splice(+ks[1], 1); }
+      changed();
+    } else if (b.dataset.tog !== undefined) {
+      const c = at(b.dataset.p), v = +b.dataset.tog; c.v = c.v || [];
+      c.v = c.v.includes(v) ? c.v.filter(x => x !== v) : [...c.v, v]; if (!c.v.length) c.v = [v];
+      changed();
+    }
+  });
+  box.addEventListener('change', e => {
+    const t = e.target; if (!t.dataset.p) return;
+    const o = at(t.dataset.p), k = t.dataset.k;
+    if (k === 't') { for (const key of Object.keys(o)) if (key !== 'not') delete o[key]; Object.assign(o, { t: t.value }, condDefault(t.value)); }
+    else if (k === 'not') { if (t.value) o.not = true; else delete o.not; }
+    else if (k === 'act') { o.act = t.value; if (t.value === 'time' && !o.time) o.time = '18:00'; }
+    else if (['from', 'to', 'n'].includes(k) && t.type === 'number') o[k] = Math.max(+t.min || 1, Math.min(+t.max || 31, +t.value || +t.min || 1));
+    else if (k === 'n' || k === 'wd') o[k] = +t.value;
+    else o[k] = t.value;
+    changed();
+  });
+  draw();
+}
 function ruleKind(r) {
   if (!r) return 'none';
   if (r.freq === 'monthly') return r.byNth ? 'monthlyNth' : 'monthly';
@@ -768,7 +1289,7 @@ function openDetail(id, opts = {}) {
   const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`;
   const show = kinds => `data-kinds="${kinds}"`;
   const html = sheetHead(isNew ? '内容の確認' : '詳細', isNew ? '登録' : '完了', isNew ? '戻る' : 'キャンセル') + `<div class="sheet-b gut" id="dForm">
-    ${isNew ? `<div class="confirm-note"><b>り</b><div>この内容で登録します。違うところがあれば、ここで直してから「登録」を押してください。</div></div>` : ''}
+    ${isNew ? `<div class="confirm-note"><b>R</b><div>この内容で登録します。違うところがあれば、ここで直してから「登録」を押してください。</div></div>` : ''}
     <div><div class="fgroup">
       <div class="f"><input type="text" id="dTitle" value="${esc(r.title)}" aria-label="タイトル"></div>
       <div class="f"><textarea id="dNotes" placeholder="メモ" aria-label="メモ">${esc(r.notes)}</textarea></div>
@@ -782,10 +1303,12 @@ function openDetail(id, opts = {}) {
       <div class="f"><span class="lab">繰り返し</span><select id="dKind">
         ${opt('none', 'しない', k)}${opt('daily', '日ごと（毎日・隔日・N日）', k)}${opt('weekly', '週ごと（曜日・隔週）', k)}${opt('monthly', '月ごと（日付・末日）', k)}${opt('monthlyNth', '月ごと（第N曜日）', k)}${opt('yearly', '毎年', k)}${opt('parity', '偶数日・奇数日', k)}${opt('hourly', '時間ごと', k)}${opt('minutely', '分ごと', k)}${opt('afterDone', '完了してから', k)}
       </select></div>
-      <div class="f" ${show('daily weekly monthly monthlyNth yearly hourly minutely afterDone')}><span class="lab" id="dIvLab">間隔</span><input type="number" id="dIv" min="1" max="999" value="${rule ? rule.interval || 1 : 1}"><span class="val" id="dIvUnit"></span>
+      <div class="f" ${show('daily weekly monthly monthlyNth yearly hourly minutely afterDone')}><span class="lab" id="dIvLab">間隔</span><select id="dIv">${ivOptions(k, rule ? rule.interval || 1 : 1)}</select><span class="val" id="dIvUnit"></span>
         <select id="dUnit" ${show('afterDone')}>${['minute', 'hour', 'day', 'week', 'month', 'year'].map(u => opt(u, UNIT_LABEL[u] + '後', rule && rule.unit || 'day')).join('')}</select></div>
       <div ${show('weekly')}><div class="wd">${wdBtns('by', byDay)}</div></div>
-      <div class="f" ${show('monthly')}><span class="lab">日付（カンマ区切り、末日は -1）</span><input type="text" id="dMd" style="max-width:40%;text-align:right" value="${rule && rule.byMonthDay ? rule.byMonthDay.join(',') : (r.due ? +r.due.slice(8, 10) : 1)}"></div>
+      <div class="f" ${show('monthly')}><label for="dEom">月末（毎月の最終日）</label><input type="checkbox" class="switch" id="dEom" ${rule && rule.byMonthDay && rule.byMonthDay.length === 1 && rule.byMonthDay[0] === -1 ? 'checked' : ''}></div>
+      <div class="f" ${show('monthly')} id="dMdRow"><span class="lab">日付（カンマ区切り）</span><input type="text" id="dMd" style="max-width:40%;text-align:right" value="${rule && rule.byMonthDay && rule.byMonthDay.some(x => x !== -1) ? rule.byMonthDay.join(',') : (r.due ? +r.due.slice(8, 10) : 1)}"></div>
+      <div class="f" ${show('monthly')}><label for="dBiz">土日祝なら前の平日にずらす</label><input type="checkbox" class="switch" id="dBiz" ${rule && rule.bizBefore ? 'checked' : ''}></div>
       <div class="f" ${show('monthlyNth')}><span class="lab">第</span><select id="dNthN">${[1, 2, 3, 4, 5, -1].map(n => opt(n, n === -1 ? '最終' : '第' + n, rule && rule.byNth ? rule.byNth.n : 1)).join('')}</select>
         <select id="dNthW">${[1, 2, 3, 4, 5, 6, 0].map(i => opt(i, WD[i] + '曜日', rule && rule.byNth ? rule.byNth.wd : 1)).join('')}</select></div>
       <div class="f" ${show('yearly')}><span class="lab">月日</span><input type="number" id="dYm" min="1" max="12" value="${rule && rule.byMonth || (r.due ? +r.due.slice(5, 7) : 1)}"><span class="val">月</span><input type="number" id="dYd" min="1" max="31" value="${rule && rule.byMonthDay ? rule.byMonthDay[0] : (r.due ? +r.due.slice(8, 10) : 1)}"><span class="val">日</span></div>
@@ -796,6 +1319,8 @@ function openDetail(id, opts = {}) {
       <div class="f" ${show('daily weekly monthly monthlyNth yearly parity hourly minutely afterDone')}><span class="lab">終了日</span><input type="date" id="dUntil" value="${rule && rule.until || ''}"></div>
       <div class="f" ${show('daily weekly monthly monthlyNth yearly parity hourly minutely afterDone')}><span class="lab">回数で終了（0は無制限）</span><input type="number" id="dCount" min="0" value="${rule && rule.count || 0}"></div>
     </div><div class="fgroup-f" id="dRuleTxt"></div></div>
+    <div ${show('daily weekly monthly monthlyNth yearly parity')}><div class="fgroup-h">詳細条件</div><div class="fgroup adv" id="dAdv"></div>
+      <div class="fgroup-f">上の繰り返しで決まる日のうち、条件に合う日だけ通知します。「もし〜なら」は上から順に、最初に当てはまったものを使います。</div></div>
     <div><div class="fgroup-h">今後の予定</div><div class="fgroup"><div class="upc" id="dUpc"></div></div></div>
     <div><div class="fgroup">
       <div class="f"><label for="dNag">確実に通知</label><input type="checkbox" class="switch" id="dNag" ${r.nag ? 'checked' : ''}></div>
@@ -804,7 +1329,7 @@ function openDetail(id, opts = {}) {
     <div><div class="fgroup">
       <div class="f"><label for="dFlag">フラグ</label><input type="checkbox" class="switch" id="dFlag" ${r.flagged ? 'checked' : ''}></div>
       <div class="f"><span class="lab">優先順位</span><select id="dPri">${[0, 1, 2, 3].map(n => opt(n, ['なし', '低 (!)', '中 (!!)', '高 (!!!)'][n], r.priority || 0)).join('')}</select></div>
-      <div class="f"><span class="lab">リスト</span><select id="dList">${S.lists.map(l => opt(l.id, esc(l.name), r.list)).join('')}</select></div>
+      ${listPicker('dList', r.list)}
     </div></div>
     ${r.input ? `<div class="fgroup-f" style="margin-top:-12px">登録時の入力: 「${esc(r.input)}」</div>` : ''}
     ${isNew ? `<button class="btn center" id="dRegister" style="background:var(--blue);color:#fff;border-radius:12px;font-weight:600">この内容で登録</button>` : ''}
@@ -814,8 +1339,10 @@ function openDetail(id, opts = {}) {
       <div id="dDelConfirm" hidden><div class="fgroup-f" style="margin:4px 16px 0">本当に削除しますか？元に戻せません。</div><button class="btn danger center" id="dDelYes" style="font-weight:600">削除する</button></div>
     </div></div>
   </div>`;
+  const adv = { cond: rule && rule.cond ? rule.cond : { op: 'and', items: [] }, ifs: rule && rule.ifs ? rule.ifs : [] };
   openSheet(html, sh => {
     const g = id => sh.querySelector('#' + id);
+    advBuilder(g('dAdv'), adv, () => refresh(true));
     const pressed = name => [...sh.querySelectorAll(`[data-wd="${name}"][aria-pressed="true"]`)].map(b => +b.dataset.v);
     const buildRule = () => {
       const kind = g('dKind').value;
@@ -828,7 +1355,7 @@ function openDetail(id, opts = {}) {
       switch (kind) {
         case 'daily': nr = { ...base, freq: 'daily' }; break;
         case 'weekly': nr = { ...base, freq: 'weekly', byDay: pressed('by').length ? pressed('by') : [dueD.getDay()] }; break;
-        case 'monthly': nr = { ...base, freq: 'monthly', byMonthDay: g('dMd').value.split(/[,、\s]+/).map(Number).filter(n => n === -1 || (n >= 1 && n <= 31)) }; if (!nr.byMonthDay.length) nr.byMonthDay = [dueD.getDate()]; break;
+        case 'monthly': nr = { ...base, freq: 'monthly', byMonthDay: g('dEom').checked ? [-1] : g('dMd').value.split(/[,、\s]+/).map(Number).filter(n => n === -1 || (n >= 1 && n <= 31)) }; if (!nr.byMonthDay.length) nr.byMonthDay = [dueD.getDate()]; if (g('dBiz').checked) nr.bizBefore = true; break;
         case 'monthlyNth': nr = { ...base, freq: 'monthly', byNth: { n: +g('dNthN').value, wd: +g('dNthW').value } }; break;
         case 'yearly': nr = { ...base, interval: 1, freq: 'yearly', byMonth: +g('dYm').value || 1, byMonthDay: [+g('dYd').value || 1] }; break;
         case 'parity': nr = { ...base, interval: 1, freq: 'parity', parity: g('dPar').value }; break;
@@ -837,6 +1364,8 @@ function openDetail(id, opts = {}) {
         case 'afterDone': nr = { ...base, freq: 'afterDone', unit: g('dUnit').value, times: [fmtLocal(dueD).slice(11)] }; break;
       }
       if (DATE_FREQS.includes(nr.freq)) {
+        if (adv.cond.items.length) nr.cond = JSON.parse(JSON.stringify(adv.cond));
+        if (adv.ifs.length) nr.ifs = JSON.parse(JSON.stringify(adv.ifs));
         nr.times = ts.length ? [...new Set(ts)].sort() : [fmtLocal(dueD).slice(11)];
         if (g('dHol').checked) nr.skipHolidays = true;
         if (['daily', 'parity', 'monthly'].includes(nr.freq) && !nr.byNth && pressed('only').length) nr.onlyDays = pressed('only');
@@ -848,7 +1377,8 @@ function openDetail(id, opts = {}) {
     const refresh = (recalcDue) => {
       const kind = g('dKind').value;
       sh.querySelectorAll('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(' ').includes(kind); });
-      g('dIvUnit').textContent = { daily: '日ごと', weekly: '週ごと', monthly: 'ヶ月ごと', monthlyNth: 'ヶ月ごと', yearly: '年ごと', hourly: '時間ごと', minutely: '分ごと', afterDone: '' }[kind] || '';
+      if (kind === 'monthly' && g('dEom').checked) g('dMdRow').hidden = true;
+      if (g('dIv').dataset.kind !== kind) { g('dIv').innerHTML = ivOptions(kind, +g('dIv').value || 1); g('dIv').dataset.kind = kind; }
       g('dNagRow').hidden = !g('dNag').checked;
       const nr = buildRule();
       if (recalcDue && nr && DATE_FREQS.includes(nr.freq)) {
@@ -864,7 +1394,7 @@ function openDetail(id, opts = {}) {
       g('dUpc').innerHTML = ups.length ? ups.map(d => `<div>${esc(fmtDue(d))}${holidayName(d) ? `<span class="hol">${holidayName(d)}</span>` : ''}</div>`).join('') + (nr && nr.freq === 'afterDone' ? '<div class="val" style="font-size:13px">以降は完了した時点から計算します</div>' : '') : '<div class="val">日時が設定されていません</div>';
     };
     sh.querySelectorAll('[data-wd]').forEach(b => b.addEventListener('click', () => { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); refresh(true); }));
-    ['dKind', 'dIv', 'dMd', 'dNthN', 'dNthW', 'dYm', 'dYd', 'dPar', 'dTimes', 'dHol', 'dUnit'].forEach(id => g(id).addEventListener('change', () => refresh(true)));
+    ['dKind', 'dIv', 'dMd', 'dEom', 'dBiz', 'dNthN', 'dNthW', 'dYm', 'dYd', 'dPar', 'dTimes', 'dHol', 'dUnit'].forEach(id => g(id).addEventListener('change', () => refresh(true)));
     ['dDue', 'dUntil', 'dCount', 'dNag'].forEach(id => g(id).addEventListener('change', () => refresh(false)));
     g('dNl').addEventListener('input', () => {
       const v = g('dNl').value.trim();
@@ -883,13 +1413,14 @@ function openDetail(id, opts = {}) {
       const kind = ruleKind(p.rule); g('dKind').value = kind;
       if (p.rule) {
         const pr = p.rule;
-        g('dIv').value = pr.interval || 1;
+        g('dIv').innerHTML = ivOptions(kind, pr.interval || 1); g('dIv').dataset.kind = kind;
         if (pr.times) g('dTimes').value = pr.times.join(', ');
         sh.querySelectorAll('[data-wd]').forEach(b => {
           const set = b.dataset.wd === 'by' ? (pr.byDay || []) : (pr.onlyDays || []);
           b.setAttribute('aria-pressed', set.includes(+b.dataset.v));
         });
-        if (pr.byMonthDay) { g('dMd').value = pr.byMonthDay.join(','); g('dYd').value = pr.byMonthDay[0]; }
+        if (pr.byMonthDay) { const eom = pr.byMonthDay.length === 1 && pr.byMonthDay[0] === -1; g('dEom').checked = eom; if (!eom) g('dMd').value = pr.byMonthDay.join(','); g('dYd').value = pr.byMonthDay[0]; }
+        g('dBiz').checked = !!pr.bizBefore;
         if (pr.byMonth) g('dYm').value = pr.byMonth;
         if (pr.byNth) { g('dNthN').value = pr.byNth.n; g('dNthW').value = pr.byNth.wd; }
         if (pr.parity) g('dPar').value = pr.parity;
@@ -971,7 +1502,7 @@ function openGroupEditor(id, opts = {}) {
       <div class="inl"><input type="text" id="gBulk" placeholder="まとめて追加: 埼玉、群馬、栃木" aria-label="まとめて追加"><button type="button" id="gBulkGo">追加</button></div>
     </div><div class="gsum" id="gSum"></div></div>
     <div><div class="fgroup">
-      <div class="f"><span class="lab">リスト</span><select id="gList">${S.lists.map(l => `<option value="${l.id}" ${G.list === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>
+      ${listPicker('gList', G.list)}
       <div class="f"><label for="gFlag">フラグ</label><input type="checkbox" class="switch" id="gFlag" ${G.flagged ? 'checked' : ''}></div>
     </div></div>
     <div class="msg err" id="gErr" style="padding:0 4px"></div>
@@ -1048,7 +1579,7 @@ function openGroupEditor(id, opts = {}) {
       if (!G.title.trim()) G.title = `${G.steps[0].title} ほか${G.steps.length - 1}件`;
       // 時刻を変えた項目は通知し直す
       G.steps.forEach(st => { st.lastNotified = null; });
-      if (isNew) { S.reminders.push(G); save(); closeSheet(); render(); const ts = stepTimes(G); toast(`<div class="bot"><b>り</b><div>グループ「${esc(G.title)}」を登録しました。${esc(fmtDue(ts[0]))} から ${G.steps.length}件を順番に通知します<button class="undo" data-undo="${G.id}">取り消す</button></div></div>`, 5000); return; }
+      if (isNew) { S.reminders.push(G); save(); closeSheet(); render(); celebrate(G.id); const ts = stepTimes(G); toast(`<div class="bot"><b>R</b><div>グループ「${esc(G.title)}」を登録しました。${esc(fmtDue(ts[0]))} から ${G.steps.length}件を順番に通知します<button class="undo" data-undo="${G.id}">取り消す</button></div></div>`, 5000); return; }
       const ix = S.reminders.findIndex(x => x.id === G.id); if (ix >= 0) { G.done = G.steps.every(x => x.done); S.reminders[ix] = G; }
       save(); closeSheet(); render(); toast('保存しました');
     };
@@ -1064,6 +1595,31 @@ $('#newGroupBtn').addEventListener('click', () => {
 });
 
 // ---- リスト編集 ----
+// リストの選択欄。「新しいリスト」を選ぶと、その場で作ってそのリストに入れられる
+function listPicker(id, cur) {
+  return `<div class="f"><span class="lab">リスト</span><select id="${id}" data-listsel>${S.lists.map(l => `<option value="${l.id}" ${l.id === cur ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}<option value="__new">＋ 新しいリスト…</option></select></div>
+    <div class="f newlist" hidden><input type="text" placeholder="新しいリストの名前" aria-label="新しいリストの名前" enterkeyhint="done"><button type="button" class="nl-ok">作成</button></div>`;
+}
+document.addEventListener('change', e => {
+  const sel = e.target.closest('select[data-listsel]'); if (!sel) return;
+  if (sel.value !== '__new') { sel.dataset.cur = sel.value; return; }
+  e.stopImmediatePropagation();
+  sel.value = sel.dataset.cur || [...sel.options][0].value;
+  const row = sel.closest('.f').nextElementSibling; row.hidden = false; row.querySelector('input').focus();
+}, true);
+document.addEventListener('focusin', e => { const sel = e.target.closest('select[data-listsel]'); if (sel && sel.value !== '__new') sel.dataset.cur = sel.value; });
+function createListFrom(row) {
+  const inp = row.querySelector('input'), name = inp.value.trim(); if (!name) { inp.focus(); return; }
+  const used = S.lists.map(l => l.color), color = COLORS.find(c => !used.includes(c)) || COLORS[S.lists.length % COLORS.length];
+  const l = { id: uid(), name, color }; S.lists.push(l); save();
+  const sel = row.previousElementSibling.querySelector('select');
+  sel.querySelector('option[value="__new"]').insertAdjacentHTML('beforebegin', `<option value="${l.id}">${esc(name)}</option>`);
+  sel.value = l.id; sel.dataset.cur = l.id; inp.value = ''; row.hidden = true;
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  toast(`リスト「${esc(name)}」を作りました`);
+}
+document.addEventListener('click', e => { const b = e.target.closest('.newlist .nl-ok'); if (b) createListFrom(b.closest('.newlist')); });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.target.closest('.newlist input')) { e.preventDefault(); createListFrom(e.target.closest('.newlist')); } });
 function openListEditor(listId) {
   const l = listId ? listById(listId) : { id: null, name: '', color: 'green' };
   let color = l.color;
@@ -1150,6 +1706,13 @@ function openData() {
       <button class="btn" id="iGo">貼り付けた JSON を取り込む</button>
       <div class="msg" id="iMsg"></div>
     </div></div>
+    <div><div class="fgroup-h">通知音</div><div class="fgroup">
+      <div class="f"><label for="sSound">アプリを開いているとき</label><select id="sSound">${Object.entries(SOUNDS).map(([k, v]) => `<option value="${k}" ${((S.settings && S.settings.sound) || 'chime') === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></div>
+      <button class="btn" id="sPlay">試しに鳴らす</button>
+    </div><div class="fgroup-f">アプリを閉じている間に届く通知は、iPhone の標準の通知音で鳴ります。Web アプリからは通知音を変えられない仕組みのためです（音のオン・オフは 設定アプリ →「通知」→「RE:main」で変えられます）。</div></div>
+    <div><div class="fgroup-h">通知を開いたとき</div><div class="fgroup">
+      <div class="f"><label for="sCopy">クリップボードにコピー</label><select id="sCopy">${[['title', 'タイトル'], ['notes', 'タイトルとメモ'], ['url', 'URL'], ['off', 'しない']].map(([v, l]) => `<option value="${v}" ${copyMode() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    </div><div class="fgroup-f">通知から開くと、内容を自動でコピーします。iPhone では画面に触れるまでコピーが許可されないことがあり、その場合は最初に画面のどこかをタップした時点でコピーします。</div></div>
     <div><div class="fgroup-h">登録のしかた</div><div class="fgroup">
       <div class="f"><label for="sQuick">入力欄からすぐ登録</label><input type="checkbox" class="switch" id="sQuick" ${quickMode() ? 'checked' : ''}></div>
     </div><div class="fgroup-f">オフ（標準）: 入力欄に書いて送ると、足りない項目だけを会話で聞き、最後に確認画面を出します。オン: リマインくんのように送った時点で登録します（取り消しボタン付き）。</div></div>
@@ -1200,6 +1763,9 @@ function openData() {
       try { const p = await Notification.requestPermission(); g('nState').textContent = { granted: '許可済み', denied: '拒否', default: '未設定' }[p] || p; g('nAsk').hidden = p !== 'default'; }
       catch (e) { g('nState').textContent = 'この環境では使えません'; g('nAsk').hidden = true; }
     };
+    g('sSound').onchange = e => { S.settings = { ...(S.settings || {}), sound: e.target.value }; save(); playSound(e.target.value); };
+    g('sPlay').onclick = () => playSound(g('sSound').value);
+    g('sCopy').onchange = e => { S.settings = { ...(S.settings || {}), copyOnOpen: e.target.value }; save(); };
     g('sQuick').onchange = e => { S.settings = { ...(S.settings || {}), quickAdd: e.target.checked }; save(); updateModeLbl(); };
     g('rSample').onclick = () => { g('rSampleC').hidden = false; g('rSample').hidden = true; };
     g('rSampleYes').onclick = () => { S = sample(); save(); closeSheet(); view = { name: 'home' }; render(); toast('サンプルに戻しました'); };
@@ -1212,7 +1778,7 @@ function openHelp() {
     ['話し言葉でOK', ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', 'ちょっとしたら電話する', '寝る前に歯ブラシ持ってく', '仕事終わりに牛乳買う', '週明けに請求書出す', '明日10時に「資料を印刷」ってリマインドして', '明日9時 https://example.com 朝会']],
     ['いつ', ['30分後 洗濯物', '明日10時 会議', '来週金曜 15時 提出', '10/25 18時半 歯医者', '25日 家賃', '今夜9時 ゴミ出し']],
     ['基本の繰り返し', ['毎日7時 薬', '毎朝 ストレッチ', '毎週月水金 20時 筋トレ', '平日8時 出社', '土日10時 掃除', '毎月25日 振込', '毎年3月10日 誕生日']],
-    ['りまいんだけの繰り返し', ['隔週火曜 7:30 燃えないゴミ', '隔日 21時 筋トレ', '3日ごと 水やり', '偶数日 7時 水やり', '奇数日の平日 12時 英単語', '毎月第2火曜 10時 定例', '毎月最終金曜 18時 飲み会', '毎月末 家計簿', '隔月 15日 美容院', '毎日8時と20時 薬', '3時間ごと 水分補給', '完了から1ヶ月後 歯ブラシ交換']],
+    ['RE:mainだけの繰り返し', ['隔週火曜 7:30 燃えないゴミ', '隔日 21時 筋トレ', '3日ごと 水やり', '偶数日 7時 水やり', '奇数日の平日 12時 英単語', '毎月第2火曜 10時 定例', '毎月最終金曜 18時 飲み会', '毎月末 家計簿', '毎月末 土日祝NG 18時 経費精算', '毎月25日 土日祝なら前の平日 給料日', '隔月 15日 美容院', '毎日8時と20時 薬', '3時間ごと 水分補給', '完了から1ヶ月後 歯ブラシ交換']],
     ['グループ（下の「グループ」ボタンでも作れます）', ['9時から 千葉、東京、神奈川、長野 を30分おき', '明日10時 資料A、資料B、資料C を1時間おき']],
     ['条件・確実さ', ['平日8時 出社 祝日除く', '毎週火曜 19時 ジム 12/31まで', '毎日 21時 日記 5回まで', '毎日8時 薬 確実に', '明日7時 ゴミ出し 10分ごとに再通知']],
   ];
@@ -1236,8 +1802,13 @@ function openHelp() {
   ];
   const html = sheetHead('書き方ガイド', '閉じる', '') + `<div class="sheet-b gut">
     <div class="fgroup-f" style="margin-top:0">LINE で送る感覚で、話しかけるように書いてください。語順は自由で、「えーと」「(笑)」「お願い」などは無視します。日時が読み取れないときは候補を出します。「」で囲んだ部分はそのまま通知の文になります。URL を書くか左のリンクボタンから付けると、通知をタップしたときに開きます。</div>
+    <div><div class="fgroup-h">指での操作</div><div class="fgroup"><div class="guide">
+      <div>行を<b>右へスワイプ</b> → 完了（完了済みは未完了に戻す）</div>
+      <div>行を<b>左へスワイプ</b> → 1時間後・フラグ・削除</div>
+      <div>リストの中で<b>左端から右へスワイプ</b> → 前の画面に戻る</div>
+      <div>シートの<b>上の部分を下へ引く</b> → 閉じる</div></div></div></div>
     ${G.map(([h, xs]) => `<div><div class="fgroup-h">${h}</div><div class="fgroup"><div class="guide">${xs.map(x => `<div><code data-try="${esc(x)}">${esc(x)}</code> <span class="val" style="font-size:13px">→ ${esc((() => { const gp = parseGroup(x); if (gp && gp.every) return `グループ ${gp.items.length}件・${gp.every.value}${UNIT_JA[gp.every.unit]}おき`; const p = parseInput(x); return p.rule ? describeRule(p.rule) : p.due ? fmtDue(p.due) : '日時なし'; })())}${(() => { const p = parseInput(x); return p.nag ? '・確実に' : ''; })()}</span></div>`).join('')}</div></div></div>`).join('')}
-    <div><div class="fgroup-h">リマインくん・純正リマインダーとの比較</div><div class="fgroup tbl-wrap"><table class="cmp"><thead><tr><th>機能</th><th>リマインくん</th><th>純正</th><th>りまいん</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table></div>
+    <div><div class="fgroup-h">リマインくん・純正リマインダーとの比較</div><div class="fgroup tbl-wrap"><table class="cmp"><thead><tr><th>機能</th><th>リマインくん</th><th>純正</th><th>RE:main</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table></div>
     <div class="fgroup-f">「N日おき」は「1日おき＝隔日」と同じ数え方で、N+1日ごとになります。迷ったら「N日ごと」と書いてください。祝日は内閣府の規則から計算しています（特例で移動した年は未対応）。</div></div>
   </div>`;
   openSheet(html, sh => {
@@ -1248,17 +1819,78 @@ function openHelp() {
 
 // ---- 通知ループ ----
 const queue = [];
+// 通知音（アプリを開いている間のバナー用）。音声ファイルは持たず、Web Audio で合成する。
+// iPhone では最初のタップで音を出せる状態にしておく必要がある
+const SOUNDS = {
+  chime: { name: 'チャイム', notes: [[880, 0, .5], [1318.5, .16, .7]], type: 'sine' },
+  bell: { name: 'ベル', notes: [[1046.5, 0, 1.1], [1568, 0, .8], [2093, 0, .5]], type: 'sine' },
+  pop: { name: 'ポップ', notes: [[660, 0, .12], [990, .09, .18]], type: 'triangle' },
+  marimba: { name: 'マリンバ', notes: [[784, 0, .35], [988, .12, .35], [1175, .24, .5]], type: 'sine' },
+  digital: { name: 'デジタル', notes: [[1760, 0, .09], [1760, .14, .09], [1760, .28, .09]], type: 'square' },
+  none: { name: 'なし', notes: [] },
+};
+let audioCtx = null;
+function audio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {} return audioCtx; }
+document.addEventListener('pointerdown', () => audio(), { once: true, passive: true });
+function playSound(key = (S.settings && S.settings.sound) || 'chime') {
+  const snd = SOUNDS[key] || SOUNDS.chime; if (!snd.notes.length) return;
+  const ctx = audio(); if (!ctx) return;
+  const t0 = ctx.currentTime + .02;
+  for (const [f, at, len] of snd.notes) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = snd.type; o.frequency.value = f;
+    const vol = snd.type === 'square' ? .05 : .22;
+    g.gain.setValueAtTime(0, t0 + at); g.gain.linearRampToValueAtTime(vol, t0 + at + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + at + len);
+    o.connect(g); g.connect(ctx.destination); o.start(t0 + at); o.stop(t0 + at + len + .05);
+  }
+}
 function notify(r, test = false, step = null) {
+  if (!document.hidden) playSound();
   if (!queue.some(x => x.id === r.id && x.step === step)) queue.push({ id: r.id, test, step });
   const st = step != null ? r.steps[step] : null;
   const title = st ? st.title : r.title;
   const url = st ? stepUrl(r, st) : r.url;
-  try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden && !window.rimainPushOn) { const n = new Notification(title, { body: url ? 'タップして開く: ' + url : st ? `${r.title}（${step + 1}/${r.steps.length}）` : r.rule ? describeRule(r.rule) : 'りまいん', tag: r.id + (st ? ':' + step : '') }); if (url) n.onclick = () => { window.open(url, '_blank', 'noopener'); n.close(); }; } } catch (e) {}
+  try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden && !window.rimainPushOn) { const n = new Notification(title, { body: url ? 'タップして開く: ' + url : st ? `${r.title}（${step + 1}/${r.steps.length}）` : r.rule ? describeRule(r.rule) : 'RE:main', tag: r.id + (st ? ':' + step : '') }); if (url) n.onclick = () => { window.open(url, '_blank', 'noopener'); n.close(); }; } } catch (e) {}
   showBanner();
 }
+// ---- 通知を開いたら内容をコピー ----
+const copyMode = () => (S.settings && S.settings.copyOnOpen) || 'title';
+function copyTextFor(r, r0) {
+  const m = copyMode();
+  if (m === 'off') return '';
+  if (m === 'url') return r.url || r.title;
+  if (m === 'notes') { const n = (r0 && r0.notes) || ''; return n ? `${r.title}\n${n}` : r.title; }
+  return r.title;
+}
+async function writeClip(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  // 古い方式（ユーザー操作の中でだけ動く）
+  try {
+    const t = document.createElement('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+    document.body.appendChild(t); t.select(); t.setSelectionRange(0, text.length); const ok = document.execCommand('copy'); t.remove(); return ok;
+  } catch (e) { return false; }
+}
+let clipPending = null, clipKey = null;
+const markCopied = () => document.querySelectorAll('.copy-btn').forEach(c => { c.textContent = 'コピー済み'; });
+// 自動でコピーを試し、許可されなければ次のタップでコピーする
+function autoCopy(key, text) {
+  if (!text || clipKey === key) return;
+  clipKey = key; clipPending = null;
+  const done = () => { clipPending = null; markCopied(); toast('通知の内容をコピーしました', 1600); };
+  const tryNow = () => document.hasFocus() && navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text).then(done, () => { clipPending = text; }) : Promise.resolve(clipPending = text);
+  tryNow();
+}
+const clipOnTap = e => {
+  if (!clipPending) return;
+  const text = clipPending; clipPending = null;
+  writeClip(text).then(ok => { if (ok) { markCopied(); if (!e.target.closest('.copy-btn')) toast('通知の内容をコピーしました', 1600); } else clipPending = text; });
+};
+document.addEventListener('touchend', clipOnTap, true);
+document.addEventListener('click', clipOnTap, true);
+window.addEventListener('focus', () => { if (clipPending && navigator.clipboard) { const t = clipPending; navigator.clipboard.writeText(t).then(() => { if (clipPending === t) { clipPending = null; markCopied(); toast('通知の内容をコピーしました', 1600); } }, () => {}); } });
 function showBanner() {
   const b = $('#banner');
-  if (!queue.length) { b.hidden = true; return; }
+  if (!queue.length) { b.hidden = true; clipPending = null; return; }
   const { id, test, step } = queue[0];
   const r0 = S.reminders.find(x => x.id === id);
   if (!r0 || (step != null && !r0.steps[step])) { queue.shift(); return showBanner(); }
@@ -1269,11 +1901,17 @@ function showBanner() {
     r = { id: r0.id, title: st.title, url: stepUrl(r0, st) };
     sub = `${r0.title}（${step + 1}/${r0.steps.length}）${nxt ? ` ・ 次: ${nxt.title} ${hm(ts[step + 1])}` : ' ・ 最後の項目'}`;
   } else sub = [r.rule ? '↻ ' + describeRule(r.rule) : '', r.nag ? `完了するまで${r.nag.every}分ごとにお知らせします` : ''].filter(Boolean).join(' ・ ');
-  b.innerHTML = `<div class="bn-top"><span class="appic">り</span>りまいん${test ? '（テスト）' : ''}${queue.length > 1 ? ` ・ ほか${queue.length - 1}件` : ''}<span class="when">今</span></div>
+  b.innerHTML = `<div class="bn-top"><span class="appic">R</span>RE:main${test ? '（テスト）' : ''}${queue.length > 1 ? ` ・ ほか${queue.length - 1}件` : ''}<span class="when">今</span></div>
     ${r.url ? `<a class="bn-main" href="${esc(r.url)}" target="_blank" rel="noopener" data-bn-open><div class="bn-title">${esc(r.title)}</div>${sub ? `<div class="bn-sub">${esc(sub)}</div>` : ''}<div class="bn-url">タップして開く: ${esc(r.url)}</div></a>`
       : `<div><div class="bn-title">${esc(r.title)}</div>${sub ? `<div class="bn-sub">${esc(sub)}</div>` : ''}</div>`}
     <div class="bn-acts">${r.url ? `<a class="pri btnlike" href="${esc(r.url)}" target="_blank" rel="noopener" data-bn-open>開く</a>` : ''}<button class="${r.url ? '' : 'pri'}" data-bn="done">完了</button><button data-bn="5">5分後</button><button data-bn="60">1時間後</button><button data-bn="1440">明日</button>${test ? '<button data-bn="close">閉じる</button>' : ''}</div>`;
   b.hidden = false;
+  const clip = copyTextFor(r, r0);
+  if (clip) {
+    b.querySelector('.bn-acts').insertAdjacentHTML('afterbegin', `<button id="bnCopy" class="copy-btn" type="button">コピー</button>`);
+    b.querySelector('#bnCopy').onclick = () => writeClip(clip).then(ok => { b.querySelector('#bnCopy').textContent = ok ? 'コピー済み' : 'コピーできません'; });
+    autoCopy(id + ':' + (step ?? '') + ':' + (r0.lastNotified || r0.due || ''), clip);
+  }
   // URL を開いたら通知は閉じる（完了にはしない。繰り返しの次回はそのまま）
   b.querySelectorAll('[data-bn-open]').forEach(a => a.addEventListener('click', () => { setTimeout(() => { queue.shift(); render(); showBanner(); }, 50); }));
   b.querySelectorAll('[data-bn]').forEach(btn => btn.onclick = () => {

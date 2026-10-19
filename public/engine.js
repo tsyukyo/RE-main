@@ -60,10 +60,15 @@ const holidayName = d => holidays(d.getFullYear()).get(`${pad(d.getMonth() + 1)}
 
 // ---- 繰り返しルール ----
 // rule = { freq, interval, start:'YYYY-MM-DD', times:['HH:MM'], byDay:[0-6], onlyDays:[0-6], byMonthDay:[1..31|-1],
-//          byNth:{n:1..5|-1, wd:0-6}, byMonth, parity:'even'|'odd', unit, skipHolidays, until:'YYYY-MM-DD', count }
+//          byNth:{n:1..5|-1, wd:0-6}, byMonth, parity:'even'|'odd', unit, skipHolidays, until:'YYYY-MM-DD', count,
+//          bizBefore（毎月の日付指定で、土日祝なら前の平日にずらす）,
+//          cond: 詳細条件 { op:'and'|'or', items:[条件 | { op, items }] }（満たす日だけ通知）,
+//          ifs: [{ cond: 条件, act:'skip'|'prev'|'next'|'time', time:'HH:MM' }]（上から順に最初に当てはまったものを使う） }
+// 条件 = { t, not } t: day(v: weekday|weekend|holiday|offday|bizday) / wd(v:[0-6]) / mday(from,to) / last(n) /
+//          month(v:[1-12]) / nth(n, wd) / parity(v) / period(from,to)
 // freq: daily | weekly | monthly | yearly | parity | hourly | minutely | afterDone
 const DATE_FREQS = ['daily', 'weekly', 'monthly', 'yearly', 'parity'];
-function dayMatches(r, d) {
+function baseDayMatches(r, d) {
   const st = parseLocal((r.start || ymd(d)) + 'T00:00');
   if (d < dayStart(st)) return false;
   if (r.until && ymd(d) > r.until) return false;
@@ -78,6 +83,7 @@ function dayMatches(r, d) {
       return (daysBetween(mondayOf(st), mondayOf(d)) / 7) % iv === 0;
     }
     case 'monthly': {
+      if (r.bizBefore && !r.byNth) return bizMonthMatch(r, st, d, r.byMonthDay && r.byMonthDay.length ? r.byMonthDay : [st.getDate()], iv);
       if (monthsBetween(st, d) % iv !== 0) return false;
       const L = lastDay(d.getFullYear(), d.getMonth());
       if (r.byNth) {
@@ -97,14 +103,95 @@ function dayMatches(r, d) {
   }
   return false;
 }
+const isOffDay = d => d.getDay() === 0 || d.getDay() === 6 || !!holidayName(d);
+// 指定日が土日祝なら前の平日へ。ずらした結果が前の月に入ることもあるので、翌月分も確かめる
+function bizMonthMatch(r, st, d, md, iv) {
+  for (const off of [0, 1]) {
+    const base = new Date(d.getFullYear(), d.getMonth() + off, 1);
+    if (((monthsBetween(st, base) % iv) + iv) % iv !== 0) continue;
+    const L = lastDay(base.getFullYear(), base.getMonth());
+    for (const x of md) {
+      let t = new Date(base.getFullYear(), base.getMonth(), x === -1 ? L : Math.min(x, L));
+      for (let i = 0; i < 10 && isOffDay(t); i++) t = addDays(t, -1);
+      if (+t === +dayStart(d)) return true;
+    }
+  }
+  return false;
+}
+// ---- 詳細条件（AND / OR / もし〜なら） ----
+function condMatch(c, d) {
+  if (!c) return true;
+  if (c.items) {
+    const xs = c.items.filter(Boolean); if (!xs.length) return true;
+    return c.op === 'or' ? xs.some(x => condMatch(x, d)) : xs.every(x => condMatch(x, d));
+  }
+  const dt = d.getDate(), L = lastDay(d.getFullYear(), d.getMonth()), wd = d.getDay(), hol = !!holidayName(d);
+  let ok;
+  switch (c.t) {
+    case 'day': ok = { weekday: wd >= 1 && wd <= 5, weekend: wd === 0 || wd === 6, holiday: hol, offday: wd === 0 || wd === 6 || hol, bizday: wd >= 1 && wd <= 5 && !hol }[c.v]; break;
+    case 'wd': ok = (c.v || []).includes(wd); break;
+    case 'mday': { const a = Math.min(+c.from || 1, L), b = Math.min(+c.to || +c.from || 31, L); ok = dt >= Math.min(a, b) && dt <= Math.max(a, b); break; }
+    case 'last': ok = dt > L - Math.max(1, +c.n || 1); break;
+    case 'month': ok = (c.v || []).includes(d.getMonth() + 1); break;
+    case 'nth': ok = wd === +c.wd && (+c.n > 0 ? Math.ceil(dt / 7) === +c.n : dt + 7 > L); break;
+    case 'parity': ok = dt % 2 === (c.v === 'even' ? 0 : 1); break;
+    case 'period': { const k = ymd(d); ok = (!c.from || k >= c.from) && (!c.to || k <= c.to); break; }
+    default: ok = true;
+  }
+  return c.not ? !ok : !!ok;
+}
+const baseOk = (r, d) => baseDayMatches(r, d) && condMatch(r.cond, d);
+const ifAct = (r, d) => (r.ifs || []).find(x => x && x.cond && condMatch(x.cond, d)) || null;
+// ずらし先: 前（次）の、元の条件に関係なく「平日かつ祝日でない」日
+function shiftDay(d, dir) { let t = addDays(d, dir); for (let i = 0; i < 14 && isOffDay(t); i++) t = addDays(t, dir); return t; }
+// その日に通知するか（ずらされて来た日も含む）。時刻の上書きがあれば times を返す
+function dayPlan(r, d) {
+  if (!r.ifs || !r.ifs.length) return baseOk(r, d) ? { times: null } : null;
+  if (baseOk(r, d)) {
+    const a = ifAct(r, d);
+    if (!a) return { times: null };
+    if (a.act === 'time' && /^\d{1,2}:\d{2}$/.test(a.time || '')) return { times: [a.time.padStart(5, '0')] };
+  }
+  for (let k = 1; k <= 14; k++) for (const dir of [-1, 1]) {
+    const c = addDays(d, -dir * k); // dir=-1(前へずらす)なら後ろの日 c から来る
+    const a = (dir === -1 ? 'prev' : 'next');
+    if (!baseOk(r, c)) continue;
+    const x = ifAct(r, c); if (!x || x.act !== a) continue;
+    if (+shiftDay(c, dir) === +dayStart(d)) return { times: null };
+  }
+  return null;
+}
+const dayMatches = (r, d) => !!dayPlan(r, d);
+const WDJ = '日月火水木金土';
+function describeCond(c, top = true) {
+  if (!c) return '';
+  if (c.items) {
+    const xs = c.items.filter(Boolean).map(x => describeCond(x, false));
+    const j = xs.join(c.op === 'or' ? ' または ' : ' かつ ');
+    return top || xs.length < 2 ? j : `(${j})`;
+  }
+  let t;
+  switch (c.t) {
+    case 'day': t = { weekday: '平日', weekend: '土日', holiday: '祝日', offday: '土日祝', bizday: '平日(祝日以外)' }[c.v]; break;
+    case 'wd': t = (c.v || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => WDJ[i]).join('・') + '曜'; break;
+    case 'mday': t = +c.from === +c.to || !c.to ? `${c.from}日` : `${c.from}〜${c.to}日`; break;
+    case 'last': t = +c.n > 1 ? `月末${c.n}日間` : '月末'; break;
+    case 'month': t = (c.v || []).slice().sort((a, b) => a - b).join('・') + '月'; break;
+    case 'nth': t = `${+c.n > 0 ? '第' + c.n : '最終'}${WDJ[+c.wd]}曜`; break;
+    case 'parity': t = c.v === 'even' ? '偶数日' : '奇数日'; break;
+    case 'period': t = `${c.from ? c.from.slice(5).replace('-', '/') : ''}〜${c.to ? c.to.slice(5).replace('-', '/') : ''}`; break;
+    default: t = '?';
+  }
+  return c.not ? `${t}以外` : t;
+}
 const ruleTimes = r => (r.times && r.times.length ? r.times : ['09:00']).slice().sort();
 // after より後の最初の発生日時（日付系ルール）
 function nextAfter(r, after) {
   const ts = ruleTimes(r);
   let d = dayStart(after);
   for (let i = 0; i < 2000; i++, d = addDays(d, 1)) {
-    if (!dayMatches(r, d)) continue;
-    for (const t of ts) {
+    const plan = dayPlan(r, d); if (!plan) continue;
+    for (const t of plan.times || ts) {
       const [h, m] = t.split(':').map(Number);
       const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
       if (dt > after) return dt;
@@ -189,7 +276,7 @@ function describeRule(r) {
   const iv = r.interval || 1;
   let s = '';
   switch (r.freq) {
-    case 'daily': s = iv === 1 ? '毎日' : iv === 2 ? '隔日' : `${iv}日ごと`; break;
+    case 'daily': s = iv === 1 ? '毎日' : iv === 2 ? '隔日（1日おき）' : `${iv - 1}日おき（${iv}日ごと）`; break;
     case 'weekly': {
       const p = iv === 1 ? '毎週' : iv === 2 ? '隔週' : `${iv}週ごと`;
       const dl = daysLabel(r.byDay && r.byDay.length ? r.byDay : [parseLocal(r.start + 'T00:00').getDay()]);
@@ -198,7 +285,7 @@ function describeRule(r) {
     case 'monthly': {
       const p = iv === 1 ? '毎月' : iv === 2 ? '隔月' : `${iv}ヶ月ごと`;
       if (r.byNth) s = `${p} ${r.byNth.n === -1 ? '最終' : '第' + r.byNth.n}${WD[r.byNth.wd]}曜`;
-      else { const md = r.byMonthDay && r.byMonthDay.length ? r.byMonthDay : [parseLocal(r.start + 'T00:00').getDate()]; s = `${p} ${md.map(x => (x === -1 ? '末日' : x + '日')).join('・')}`; }
+      else { const md = r.byMonthDay && r.byMonthDay.length ? r.byMonthDay : [parseLocal(r.start + 'T00:00').getDate()]; s = `${p} ${md.map(x => (x === -1 ? '月末' : x + '日')).join('・')}`; }
       break;
     }
     case 'yearly': { const st = parseLocal(r.start + 'T00:00'); s = `毎年 ${r.byMonth || st.getMonth() + 1}月${(r.byMonthDay && r.byMonthDay[0]) || st.getDate()}日`; break; }
@@ -210,6 +297,9 @@ function describeRule(r) {
   if (r.onlyDays && r.onlyDays.length && r.freq !== 'weekly') s += `（${daysLabel(r.onlyDays)}のみ）`;
   if (DATE_FREQS.includes(r.freq)) s += ' ' + ruleTimes(r).map(t => t.replace(/^0/, '')).join('・');
   if (r.skipHolidays) s += '・祝日除く';
+  if (r.bizBefore) s += '（土日祝なら前の平日）';
+  if (r.cond && r.cond.items && r.cond.items.length) s += `（${describeCond(r.cond)}）`;
+  if (r.ifs && r.ifs.length) s += r.ifs.map(x => `・もし${describeCond(x.cond)}なら${{ skip: '通知しない', prev: '前の平日', next: '次の平日', time: (x.time || '').replace(/^0/, '') + 'に' }[x.act] || ''}`).join('');
   if (r.until) { const u = parseLocal(r.until + 'T00:00'); s += `・${u.getMonth() + 1}/${u.getDate()}まで`; }
   if (r.count) s += `・${r.count}回まで`;
   return s;
@@ -265,7 +355,10 @@ function parseInput(raw, now = new Date()) {
   // 1) 確実に通知（完了するまで再通知）
   take(/(\d+)\s*分(?:ごと|毎|おき)に?\s*(?:再通知|しつこく|通知し続け\S*|鳴らし\S*|催促\S*)/, m => { nag = { every: +m[1] }; });
   take(/(?:確実に|しつこく|完了するまで|終わるまで|済むまで|やるまで|忘れないように|絶対に?)\s*(?:通知|知らせて|リマインド|教えて)?(?:して)?/, () => { if (!nag) nag = { every: 5 }; });
-  // 2) 祝日を除く
+  // 2) 土日祝を避ける（月末なら最後の平日）
+  let biz = null;
+  take(/(?:土日祝(?:日)?|土日[・と]?祝(?:日)?|休日)(?:は|なら|の場合は?|だったら|の時は?|のときは?)?\s*前の平日(?:に|へ)?(?:ずらす|ずらして)?|(?:土日祝(?:日)?|土日[・と]?祝(?:日)?|休日)(?:は|を|と|が|なら|の場合は?)?\s*(?:NG|ＮＧ|除く|除いて|のぞく|避ける|避けて|以外|ダメ|だめ|休み|なし)(?:の場合は?|なら)?(?:[、,]?\s*前の平日(?:に|へ)?(?:ずらす|ずらして)?)?|前の平日(?:に|へ)?(?:ずらす|ずらして)?|最終営業日|最後の平日|月末の平日/i, m => { biz = m[0]; });
+  // 祝日を除く
   let skipHolidays = false;
   take(/祝(?:祭)?日(?:は|を|と)?(?:除く|除いて|のぞく|休み|お休み|スキップ|飛ばす|飛ばして|なし|以外)|祝日以外/, () => { skipHolidays = true; });
   // 3) 終了条件
@@ -342,6 +435,7 @@ function parseInput(raw, now = new Date()) {
   }
   // 8) 時刻（複数可）
   const times = [];
+  let vague = false; // 「今夜」「朝」「寝る前」など、時刻をこちらで補ったとき
   const tre = /(午前|午後|朝|昼|夕方|夕|夜|晩|深夜|AM|PM|am|pm)?\s*(\d{1,2})\s*(?::\s*(\d{2})|時\s*(?:(\d{1,2})\s*分|(半))?)/;
   if (!relDue) {
     let m;
@@ -357,10 +451,11 @@ function parseInput(raw, now = new Date()) {
     }
     take(/正午/, () => times.push('12:00'));
     const CASUAL = [[/寝る前/, '22:00'], [/起きたら|起床後?/, '07:00'], [/朝イチ|朝一/, '09:00'], [/昼過ぎ/, '13:00'], [/お昼|昼休み/, '12:00'], [/おやつ/, '15:00'], [/仕事終わり|仕事後|定時後?|退勤後?|帰り/, '18:00']];
-    if (!times.length) for (const [re, t] of CASUAL) if (take(new RegExp('(?:' + re.source + ')(?=に|の時間|で|\\s|$)'), () => times.push(t))) break;
+    if (!times.length) for (const [re, t] of CASUAL) if (take(new RegExp('(?:' + re.source + ')(?=に|の時間|で|\\s|$)'), () => { times.push(t); vague = true; })) break;
     if (!times.length) take(/(朝|昼|夕方|夜|晩)(?=に|の|\s|$)/, m => { period = m[1]; });
-    if (!times.length && period) times.push({ 朝: '08:00', 昼: '12:00', 夕方: '17:00', 夜: '20:00', 晩: '20:00' }[period]);
+    if (!times.length && period) { times.push({ 朝: '08:00', 昼: '12:00', 夕方: '17:00', 夜: '20:00', 晩: '20:00' }[period]); vague = true; }
   }
+  if (biz && /最終|最後|月末/.test(biz) && (!rule || (rule.freq === 'monthly' && !rule.byNth)) && !relDue) { if (!rule) R({ freq: 'monthly' }); rule.byMonthDay = [-1]; }
   const uniqTimes = [...new Set(times)].sort();
 
   // 9) 組み立て
@@ -372,6 +467,11 @@ function parseInput(raw, now = new Date()) {
   if (relDue) { due = relDue; notes.push('相対時刻'); }
   else if (rule) {
     if (skipHolidays) rule.skipHolidays = true;
+    if (biz) {
+      if (rule.freq === 'monthly' && !rule.byNth) { rule.bizBefore = true; if (/最終|最後|月末/.test(biz)) rule.byMonthDay = [-1]; }
+      else if (rule.freq === 'weekly') { rule.byDay = (rule.byDay || [1, 2, 3, 4, 5]).filter(x => x >= 1 && x <= 5); if (!rule.byDay.length) rule.byDay = [1, 2, 3, 4, 5]; rule.skipHolidays = true; }
+      else if (DATE_FREQS.includes(rule.freq)) { rule.onlyDays = [1, 2, 3, 4, 5]; rule.skipHolidays = true; }
+    }
     if (until) rule.until = until;
     if (count) rule.count = count;
     if (DATE_FREQS.includes(rule.freq)) {
@@ -402,7 +502,12 @@ function parseInput(raw, now = new Date()) {
     const d = date || dayStart(now);
     const [h, mi] = (uniqTimes[0] || '09:00').split(':').map(Number);
     due = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi);
-    if (!date && due <= now) { due = addDays(due, 1); notes.push('この時刻は過ぎているので明日にしました'); }
+    const nextHour = () => { const d2 = new Date(now); d2.setMinutes(0, 0, 0); d2.setHours(d2.getHours() + 1); return d2; };
+    // 「今夜」「今日の夕方」のように時刻を補った場合、その時刻が過ぎていれば、過去にせず次の正時にする
+    // （夕方以降に「夜」「寝る前」のように日付なしで書いたときも、今夜のこととみなす）
+    if (vague && due <= now && ((date && +date === +dayStart(now)) || (!date && +uniqTimes[0].slice(0, 2) >= 17 && now.getHours() >= 17))) {
+      const was = uniqTimes[0].replace(/^0/, ''); due = nextHour(); notes.push(`${was} は過ぎているので ${due.getHours()}:00 にしました`);
+    } else if (!date && due <= now) { due = addDays(due, 1); notes.push('この時刻は過ぎているので明日にしました'); }
     else if (date && !uniqTimes.length) {
       if (due <= now) { due = new Date(now); due.setMinutes(0, 0, 0); due.setHours(due.getHours() + 1); notes.push(`9:00 は過ぎているので ${due.getHours()}:00 にしました`); }
       else notes.push('時刻の指定がないので 9:00 にしました');
@@ -456,4 +561,4 @@ function parseGroup(raw, now = new Date()) {
   return { due: head.due, items, every, url: head.url };
 }
 
-if (typeof module !== 'undefined') module.exports = { parseGroup, groupTimes, parseInput, describeRule, nextAfter, nextOnComplete, upcoming, fmtDue, holidayName, holidays, fmtLocal, parseLocal, ymd, firstOccurrence, dayMatches };
+if (typeof module !== 'undefined') module.exports = { parseGroup, groupTimes, parseInput, describeRule, nextAfter, nextOnComplete, upcoming, fmtDue, holidayName, holidays, fmtLocal, parseLocal, ymd, firstOccurrence, dayMatches, condMatch, describeCond };
