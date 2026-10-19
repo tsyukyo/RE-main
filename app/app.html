@@ -1703,6 +1703,9 @@ function openData() {
       <div class="f"><label for="sSound">アプリを開いているとき</label><select id="sSound">${Object.entries(SOUNDS).map(([k, v]) => `<option value="${k}" ${((S.settings && S.settings.sound) || 'chime') === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></div>
       <button class="btn" id="sPlay">試しに鳴らす</button>
     </div><div class="fgroup-f">アプリを閉じている間に届く通知は、iPhone の標準の通知音で鳴ります。Web アプリからは通知音を変えられない仕組みのためです（音のオン・オフは 設定アプリ →「通知」→「RE:main」で変えられます）。</div></div>
+    <div><div class="fgroup-h">通知を開いたとき</div><div class="fgroup">
+      <div class="f"><label for="sCopy">クリップボードにコピー</label><select id="sCopy">${[['title', 'タイトル'], ['notes', 'タイトルとメモ'], ['url', 'URL'], ['off', 'しない']].map(([v, l]) => `<option value="${v}" ${copyMode() === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    </div><div class="fgroup-f">通知から開くと、内容を自動でコピーします。iPhone では画面に触れるまでコピーが許可されないことがあり、その場合は最初に画面のどこかをタップした時点でコピーします。</div></div>
     <div><div class="fgroup-h">登録のしかた</div><div class="fgroup">
       <div class="f"><label for="sQuick">入力欄からすぐ登録</label><input type="checkbox" class="switch" id="sQuick" ${quickMode() ? 'checked' : ''}></div>
     </div><div class="fgroup-f">オフ（標準）: 入力欄に書いて送ると、足りない項目だけを会話で聞き、最後に確認画面を出します。オン: リマインくんのように送った時点で登録します（取り消しボタン付き）。</div></div>
@@ -1755,6 +1758,7 @@ function openData() {
     };
     g('sSound').onchange = e => { S.settings = { ...(S.settings || {}), sound: e.target.value }; save(); playSound(e.target.value); };
     g('sPlay').onclick = () => playSound(g('sSound').value);
+    g('sCopy').onchange = e => { S.settings = { ...(S.settings || {}), copyOnOpen: e.target.value }; save(); };
     g('sQuick').onchange = e => { S.settings = { ...(S.settings || {}), quickAdd: e.target.checked }; save(); updateModeLbl(); };
     g('rSample').onclick = () => { g('rSampleC').hidden = false; g('rSample').hidden = true; };
     g('rSampleYes').onclick = () => { S = sample(); save(); closeSheet(); view = { name: 'home' }; render(); toast('サンプルに戻しました'); };
@@ -1842,9 +1846,44 @@ function notify(r, test = false, step = null) {
   try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden && !window.rimainPushOn) { const n = new Notification(title, { body: url ? 'タップして開く: ' + url : st ? `${r.title}（${step + 1}/${r.steps.length}）` : r.rule ? describeRule(r.rule) : 'RE:main', tag: r.id + (st ? ':' + step : '') }); if (url) n.onclick = () => { window.open(url, '_blank', 'noopener'); n.close(); }; } } catch (e) {}
   showBanner();
 }
+// ---- 通知を開いたら内容をコピー ----
+const copyMode = () => (S.settings && S.settings.copyOnOpen) || 'title';
+function copyTextFor(r, r0) {
+  const m = copyMode();
+  if (m === 'off') return '';
+  if (m === 'url') return r.url || r.title;
+  if (m === 'notes') { const n = (r0 && r0.notes) || ''; return n ? `${r.title}\n${n}` : r.title; }
+  return r.title;
+}
+async function writeClip(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  // 古い方式（ユーザー操作の中でだけ動く）
+  try {
+    const t = document.createElement('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+    document.body.appendChild(t); t.select(); t.setSelectionRange(0, text.length); const ok = document.execCommand('copy'); t.remove(); return ok;
+  } catch (e) { return false; }
+}
+let clipPending = null, clipKey = null;
+const markCopied = () => document.querySelectorAll('.copy-btn').forEach(c => { c.textContent = 'コピー済み'; });
+// 自動でコピーを試し、許可されなければ次のタップでコピーする
+function autoCopy(key, text) {
+  if (!text || clipKey === key) return;
+  clipKey = key; clipPending = null;
+  const done = () => { clipPending = null; markCopied(); toast('通知の内容をコピーしました', 1600); };
+  const tryNow = () => document.hasFocus() && navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text).then(done, () => { clipPending = text; }) : Promise.resolve(clipPending = text);
+  tryNow();
+}
+const clipOnTap = e => {
+  if (!clipPending) return;
+  const text = clipPending; clipPending = null;
+  writeClip(text).then(ok => { if (ok) { markCopied(); if (!e.target.closest('.copy-btn')) toast('通知の内容をコピーしました', 1600); } else clipPending = text; });
+};
+document.addEventListener('touchend', clipOnTap, true);
+document.addEventListener('click', clipOnTap, true);
+window.addEventListener('focus', () => { if (clipPending && navigator.clipboard) { const t = clipPending; navigator.clipboard.writeText(t).then(() => { if (clipPending === t) { clipPending = null; markCopied(); toast('通知の内容をコピーしました', 1600); } }, () => {}); } });
 function showBanner() {
   const b = $('#banner');
-  if (!queue.length) { b.hidden = true; return; }
+  if (!queue.length) { b.hidden = true; clipPending = null; return; }
   const { id, test, step } = queue[0];
   const r0 = S.reminders.find(x => x.id === id);
   if (!r0 || (step != null && !r0.steps[step])) { queue.shift(); return showBanner(); }
@@ -1860,6 +1899,12 @@ function showBanner() {
       : `<div><div class="bn-title">${esc(r.title)}</div>${sub ? `<div class="bn-sub">${esc(sub)}</div>` : ''}</div>`}
     <div class="bn-acts">${r.url ? `<a class="pri btnlike" href="${esc(r.url)}" target="_blank" rel="noopener" data-bn-open>開く</a>` : ''}<button class="${r.url ? '' : 'pri'}" data-bn="done">完了</button><button data-bn="5">5分後</button><button data-bn="60">1時間後</button><button data-bn="1440">明日</button>${test ? '<button data-bn="close">閉じる</button>' : ''}</div>`;
   b.hidden = false;
+  const clip = copyTextFor(r, r0);
+  if (clip) {
+    b.querySelector('.bn-acts').insertAdjacentHTML('afterbegin', `<button id="bnCopy" class="copy-btn" type="button">コピー</button>`);
+    b.querySelector('#bnCopy').onclick = () => writeClip(clip).then(ok => { b.querySelector('#bnCopy').textContent = ok ? 'コピー済み' : 'コピーできません'; });
+    autoCopy(id + ':' + (step ?? '') + ':' + (r0.lastNotified || r0.due || ''), clip);
+  }
   // URL を開いたら通知は閉じる（完了にはしない。繰り返しの次回はそのまま）
   b.querySelectorAll('[data-bn-open]').forEach(a => a.addEventListener('click', () => { setTimeout(() => { queue.shift(); render(); showBanner(); }, 50); }));
   b.querySelectorAll('[data-bn]').forEach(btn => btn.onclick = () => {

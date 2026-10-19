@@ -75,14 +75,18 @@
     const title = st ? st.title : r.title;
     const url = st ? stepUrl(r, st) : r.url;
     const sub = st ? `${r.title}（${step + 1}/${r.steps.length}）` : r.rule ? '↻ ' + describeRule(r.rule) : '';
+    // 通知から開いたら内容をコピー（設定で変更可）
+    const clip = typeof copyTextFor === 'function' ? copyTextFor({ title, url }, st ? { notes: st.notes || '' } : r) : '';
     const html = sheetHead('通知', '閉じる', '') + `<div class="sheet-b gut act-sheet">
       <div class="act-head"><div class="act-title">${esc(title)}</div>${sub ? `<div class="act-sub">${esc(sub)}</div>` : ''}</div>
       ${url ? `<a class="act-btn pri" href="${esc(url)}" target="_blank" rel="noopener" data-a="open">URL を開く<span>${esc(hostOf(url))}</span></a>` : ''}
       <button class="act-btn ${url ? '' : 'pri'}" data-a="done">完了</button>
+      ${clip ? `<button class="act-btn copy-btn" id="actCopy" type="button">コピー</button>` : ''}
       <div class="act-row"><button class="act-btn" data-a="10">10分後</button><button class="act-btn" data-a="60">1時間後</button><button class="act-btn" data-a="tomorrow">明日の朝</button></div>
     </div>`;
     openSheet(html, sh => {
       sh.querySelector('[data-act="ok"]').onclick = closeSheet;
+      if (clip) { sh.querySelector('#actCopy').onclick = () => writeClip(clip).then(ok => { if (ok) markCopied(); else sh.querySelector('#actCopy').textContent = 'コピーできません'; }); autoCopy(`act:${id}:${step}:${Date.now()}`, clip); }
       sh.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => {
         const a = b.dataset.a;
         if (a === 'open') { setTimeout(closeSheet, 50); return; }
