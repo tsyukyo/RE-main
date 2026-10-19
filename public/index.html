@@ -880,7 +880,7 @@ document.addEventListener('click', e => {
 });
 
 // ---- 自然文入力（リマインくん式） ----
-const EXAMPLES = ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', '隔週火曜 7:30 燃えないゴミ', '偶数日 7時 水やり', '毎日8時と20時 薬 確実に', '平日8時 出社 祝日除く', '毎月第2火曜10時 定例', '毎月末 家計簿', '完了から1ヶ月後 歯ブラシ交換', '3日ごと 21時 ストレッチ', '寝る前に歯ブラシ持ってく'];
+const EXAMPLES = ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', '隔週火曜 7:30 燃えないゴミ', '偶数日 7時 水やり', '毎日8時と20時 薬 確実に', '平日8時 出社 祝日除く', '毎月第2火曜10時 定例', '毎月末 家計簿', '毎月末 土日祝NG 18時 経費精算', '毎月25日 土日祝なら前の平日 給料日', '完了から1ヶ月後 歯ブラシ交換', '3日ごと 21時 ストレッチ', '寝る前に歯ブラシ持ってく'];
 $('#examples').innerHTML = EXAMPLES.map(x => `<button type="button" class="ex" data-ex="${esc(x)}">${esc(x)}</button>`).join('');
 function interpretation(p, url) {
   const chips = [];
@@ -917,7 +917,7 @@ function whenGroups(now = new Date()) {
     ['今日', today],
     ['明日', [['7:00', '明日 朝7時'], ['8:00', '明日 朝8時'], ['9:00', '明日 9時'], ['12:00', '明日 12時'], ['18:00', '明日 18時'], ['21:00', '明日 21時']]],
     ['今週・来週', wk.filter(([l]) => !l.startsWith(WDN[now.getDay()]))],
-    ['くり返し', [['毎朝 7:00', '毎日 朝7時'], ['毎朝 8:00', '毎日 朝8時'], ['毎晩 21:00', '毎日 21時'], ['1日おき 8:00', '1日おき 8時'], ['2日おき 8:00', '2日おき 8時'], ['平日 8:00', '平日 8時'], ['毎週月曜 9:00', '毎週月曜 9時'], ['隔週月曜 9:00', '隔週月曜 9時'], ['毎月1日 9:00', '毎月1日 9時'], ['毎月末 9:00', '毎月末 9時']]],
+    ['くり返し', [['毎朝 7:00', '毎日 朝7時'], ['毎朝 8:00', '毎日 朝8時'], ['毎晩 21:00', '毎日 21時'], ['1日おき 8:00', '1日おき 8時'], ['2日おき 8:00', '2日おき 8時'], ['平日 8:00', '平日 8時'], ['毎週月曜 9:00', '毎週月曜 9時'], ['隔週月曜 9:00', '隔週月曜 9時'], ['毎月1日 9:00', '毎月1日 9時'], ['毎月末 9:00', '毎月末 9時'], ['月末の平日 9:00', '毎月末 土日祝NG 9時']]],
   ].filter(([, a]) => a.length);
 }
 const whenChips = (attr, now) => whenGroups(now).map(([g, a]) => `<div class="wg"><span class="wg-h">${g}</span>${a.map(([l, t]) => `<button type="button" ${attr}="${esc(t)}">${esc(l)}</button>`).join('')}</div>`).join('');
@@ -1222,7 +1222,9 @@ function openDetail(id, opts = {}) {
       <div class="f" ${show('daily weekly monthly monthlyNth yearly hourly minutely afterDone')}><span class="lab" id="dIvLab">間隔</span><select id="dIv">${ivOptions(k, rule ? rule.interval || 1 : 1)}</select><span class="val" id="dIvUnit"></span>
         <select id="dUnit" ${show('afterDone')}>${['minute', 'hour', 'day', 'week', 'month', 'year'].map(u => opt(u, UNIT_LABEL[u] + '後', rule && rule.unit || 'day')).join('')}</select></div>
       <div ${show('weekly')}><div class="wd">${wdBtns('by', byDay)}</div></div>
-      <div class="f" ${show('monthly')}><span class="lab">日付（カンマ区切り、末日は -1）</span><input type="text" id="dMd" style="max-width:40%;text-align:right" value="${rule && rule.byMonthDay ? rule.byMonthDay.join(',') : (r.due ? +r.due.slice(8, 10) : 1)}"></div>
+      <div class="f" ${show('monthly')}><label for="dEom">月末（毎月の最終日）</label><input type="checkbox" class="switch" id="dEom" ${rule && rule.byMonthDay && rule.byMonthDay.length === 1 && rule.byMonthDay[0] === -1 ? 'checked' : ''}></div>
+      <div class="f" ${show('monthly')} id="dMdRow"><span class="lab">日付（カンマ区切り）</span><input type="text" id="dMd" style="max-width:40%;text-align:right" value="${rule && rule.byMonthDay && rule.byMonthDay.some(x => x !== -1) ? rule.byMonthDay.join(',') : (r.due ? +r.due.slice(8, 10) : 1)}"></div>
+      <div class="f" ${show('monthly')}><label for="dBiz">土日祝なら前の平日にずらす</label><input type="checkbox" class="switch" id="dBiz" ${rule && rule.bizBefore ? 'checked' : ''}></div>
       <div class="f" ${show('monthlyNth')}><span class="lab">第</span><select id="dNthN">${[1, 2, 3, 4, 5, -1].map(n => opt(n, n === -1 ? '最終' : '第' + n, rule && rule.byNth ? rule.byNth.n : 1)).join('')}</select>
         <select id="dNthW">${[1, 2, 3, 4, 5, 6, 0].map(i => opt(i, WD[i] + '曜日', rule && rule.byNth ? rule.byNth.wd : 1)).join('')}</select></div>
       <div class="f" ${show('yearly')}><span class="lab">月日</span><input type="number" id="dYm" min="1" max="12" value="${rule && rule.byMonth || (r.due ? +r.due.slice(5, 7) : 1)}"><span class="val">月</span><input type="number" id="dYd" min="1" max="31" value="${rule && rule.byMonthDay ? rule.byMonthDay[0] : (r.due ? +r.due.slice(8, 10) : 1)}"><span class="val">日</span></div>
@@ -1265,7 +1267,7 @@ function openDetail(id, opts = {}) {
       switch (kind) {
         case 'daily': nr = { ...base, freq: 'daily' }; break;
         case 'weekly': nr = { ...base, freq: 'weekly', byDay: pressed('by').length ? pressed('by') : [dueD.getDay()] }; break;
-        case 'monthly': nr = { ...base, freq: 'monthly', byMonthDay: g('dMd').value.split(/[,、\s]+/).map(Number).filter(n => n === -1 || (n >= 1 && n <= 31)) }; if (!nr.byMonthDay.length) nr.byMonthDay = [dueD.getDate()]; break;
+        case 'monthly': nr = { ...base, freq: 'monthly', byMonthDay: g('dEom').checked ? [-1] : g('dMd').value.split(/[,、\s]+/).map(Number).filter(n => n === -1 || (n >= 1 && n <= 31)) }; if (!nr.byMonthDay.length) nr.byMonthDay = [dueD.getDate()]; if (g('dBiz').checked) nr.bizBefore = true; break;
         case 'monthlyNth': nr = { ...base, freq: 'monthly', byNth: { n: +g('dNthN').value, wd: +g('dNthW').value } }; break;
         case 'yearly': nr = { ...base, interval: 1, freq: 'yearly', byMonth: +g('dYm').value || 1, byMonthDay: [+g('dYd').value || 1] }; break;
         case 'parity': nr = { ...base, interval: 1, freq: 'parity', parity: g('dPar').value }; break;
@@ -1285,6 +1287,7 @@ function openDetail(id, opts = {}) {
     const refresh = (recalcDue) => {
       const kind = g('dKind').value;
       sh.querySelectorAll('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(' ').includes(kind); });
+      if (kind === 'monthly' && g('dEom').checked) g('dMdRow').hidden = true;
       if (g('dIv').dataset.kind !== kind) { g('dIv').innerHTML = ivOptions(kind, +g('dIv').value || 1); g('dIv').dataset.kind = kind; }
       g('dNagRow').hidden = !g('dNag').checked;
       const nr = buildRule();
@@ -1301,7 +1304,7 @@ function openDetail(id, opts = {}) {
       g('dUpc').innerHTML = ups.length ? ups.map(d => `<div>${esc(fmtDue(d))}${holidayName(d) ? `<span class="hol">${holidayName(d)}</span>` : ''}</div>`).join('') + (nr && nr.freq === 'afterDone' ? '<div class="val" style="font-size:13px">以降は完了した時点から計算します</div>' : '') : '<div class="val">日時が設定されていません</div>';
     };
     sh.querySelectorAll('[data-wd]').forEach(b => b.addEventListener('click', () => { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); refresh(true); }));
-    ['dKind', 'dIv', 'dMd', 'dNthN', 'dNthW', 'dYm', 'dYd', 'dPar', 'dTimes', 'dHol', 'dUnit'].forEach(id => g(id).addEventListener('change', () => refresh(true)));
+    ['dKind', 'dIv', 'dMd', 'dEom', 'dBiz', 'dNthN', 'dNthW', 'dYm', 'dYd', 'dPar', 'dTimes', 'dHol', 'dUnit'].forEach(id => g(id).addEventListener('change', () => refresh(true)));
     ['dDue', 'dUntil', 'dCount', 'dNag'].forEach(id => g(id).addEventListener('change', () => refresh(false)));
     g('dNl').addEventListener('input', () => {
       const v = g('dNl').value.trim();
@@ -1326,7 +1329,8 @@ function openDetail(id, opts = {}) {
           const set = b.dataset.wd === 'by' ? (pr.byDay || []) : (pr.onlyDays || []);
           b.setAttribute('aria-pressed', set.includes(+b.dataset.v));
         });
-        if (pr.byMonthDay) { g('dMd').value = pr.byMonthDay.join(','); g('dYd').value = pr.byMonthDay[0]; }
+        if (pr.byMonthDay) { const eom = pr.byMonthDay.length === 1 && pr.byMonthDay[0] === -1; g('dEom').checked = eom; if (!eom) g('dMd').value = pr.byMonthDay.join(','); g('dYd').value = pr.byMonthDay[0]; }
+        g('dBiz').checked = !!pr.bizBefore;
         if (pr.byMonth) g('dYm').value = pr.byMonth;
         if (pr.byNth) { g('dNthN').value = pr.byNth.n; g('dNthW').value = pr.byNth.wd; }
         if (pr.parity) g('dPar').value = pr.parity;
@@ -1680,7 +1684,7 @@ function openHelp() {
     ['話し言葉でOK', ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', 'ちょっとしたら電話する', '寝る前に歯ブラシ持ってく', '仕事終わりに牛乳買う', '週明けに請求書出す', '明日10時に「資料を印刷」ってリマインドして', '明日9時 https://example.com 朝会']],
     ['いつ', ['30分後 洗濯物', '明日10時 会議', '来週金曜 15時 提出', '10/25 18時半 歯医者', '25日 家賃', '今夜9時 ゴミ出し']],
     ['基本の繰り返し', ['毎日7時 薬', '毎朝 ストレッチ', '毎週月水金 20時 筋トレ', '平日8時 出社', '土日10時 掃除', '毎月25日 振込', '毎年3月10日 誕生日']],
-    ['RE:mainだけの繰り返し', ['隔週火曜 7:30 燃えないゴミ', '隔日 21時 筋トレ', '3日ごと 水やり', '偶数日 7時 水やり', '奇数日の平日 12時 英単語', '毎月第2火曜 10時 定例', '毎月最終金曜 18時 飲み会', '毎月末 家計簿', '隔月 15日 美容院', '毎日8時と20時 薬', '3時間ごと 水分補給', '完了から1ヶ月後 歯ブラシ交換']],
+    ['RE:mainだけの繰り返し', ['隔週火曜 7:30 燃えないゴミ', '隔日 21時 筋トレ', '3日ごと 水やり', '偶数日 7時 水やり', '奇数日の平日 12時 英単語', '毎月第2火曜 10時 定例', '毎月最終金曜 18時 飲み会', '毎月末 家計簿', '毎月末 土日祝NG 18時 経費精算', '毎月25日 土日祝なら前の平日 給料日', '隔月 15日 美容院', '毎日8時と20時 薬', '3時間ごと 水分補給', '完了から1ヶ月後 歯ブラシ交換']],
     ['グループ（下の「グループ」ボタンでも作れます）', ['9時から 千葉、東京、神奈川、長野 を30分おき', '明日10時 資料A、資料B、資料C を1時間おき']],
     ['条件・確実さ', ['平日8時 出社 祝日除く', '毎週火曜 19時 ジム 12/31まで', '毎日 21時 日記 5回まで', '毎日8時 薬 確実に', '明日7時 ゴミ出し 10分ごとに再通知']],
   ];
