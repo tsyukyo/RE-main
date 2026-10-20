@@ -566,7 +566,8 @@ function parseGroup(raw, now = new Date()) {
 // 「明日」「3日後」のような相対表現は拾わない（チラシやページの文面では誤検出になりやすいため）
 // タイトルにしない飾りや決まり文句を落とす（「【重要】保護者会のお知らせ」→「保護者会」）
 function cleanTitle(s) {
-  return String(s || '').replace(/[【\[(（<＜《「『][^】\]）)>＞》」』]{0,8}[】\]）)>＞》」』]/g, ' ')
+  // 【抽選販売】のような短い飾りの括弧は外す。「」『』は商品名などが入るので中身を残す
+  return String(s || '').replace(/[【\[(（<＜《][^】\]）)>＞》]{0,8}[】\]）)>＞》]/g, ' ')
     .replace(/[■□●○◆◇▲△▼▽★☆※♪→⇒▶►・*＊#＃|｜_]+/g, ' ')
     .replace(/^(Re|RE|Fw|FW|Fwd):\s*/, '')
     .replace(/(についての|に関する)?(お知らせ|ご案内|ご連絡|のご確認|ご注文の確認|ご予約の確認|確認メール)$/, '')
@@ -576,6 +577,13 @@ function cleanTitle(s) {
     .replace(/(?<=[\u3040-\u30ff\u4e00-\u9fff]) (?=[\u3040-\u30ff\u4e00-\u9fff])/g, '');
 }
 const wordy = s => (s.match(/[\p{L}]/gu) || []).length >= 2 && (s.match(/\d/g) || []).length <= s.length / 2;
+// 抽選・予約サイトでよく出る期日の種類。prio が小さいほど大事（候補の並びと最初の選択に使う）
+const DATE_KINDS = [
+  { kind: 'result', tag: '抽選発表', prio: 0, re: /当選発表|当落発表|当選者発表|当選者の?発表|抽選結果|結果発表|結果の?(ご)?(連絡|通知|案内|お知らせ)|当選(の)?(ご)?(連絡|通知|メール|案内)|当落|発表/ },
+  { kind: 'buy', tag: '購入期限', prio: 1, re: /購入期限|購入手続|購入期間|お支払|支払(い)?期限|支払(い)?期間|決済|入金|払込|払い込み|引換|引き換え|引取|受け取り期限/ },
+  { kind: 'close', tag: '応募締切', prio: 1, re: /応募締切|応募期限|受付終了|受付締切|応募終了|エントリー(締切|終了|期限)|締切|締め切り|〆切|終了/ },
+  { kind: 'open', tag: '応募開始', prio: 2, re: /受付開始|応募開始|エントリー開始|抽選開始|販売開始|発売開始|一般発売|先行受付|受付期間|応募期間|エントリー期間|抽選期間|申込期間/ },
+];
 function findDates(raw, now = new Date(), opt = {}) {
   let text = String(raw || '').normalize('NFKC').replace(/\r/g, '');
   // 写真の文字読み取りは字の間に空白が入りやすいので詰める
@@ -618,8 +626,13 @@ function findDates(raw, now = new Date(), opt = {}) {
         times.push({ h: h % 24, mm, word: before ? before[1] : '' });
         if (times.length >= 3) break;
       }
-      const deadline = /締切|締め切り|〆切|期限|まで|迄/.test(line);
-      let label = line.replace(DATE, ' ').replace(TIME, ' ').replace(/[(（][日月火水木金土](曜日?)?[)）]/g, ' ')
+      // 「10月1日 10:00〜10月7日 23:59」のように1行に期間が書かれているときは、始まりと終わりを分ける
+      const gapIs = (a, b) => /^(〜|~|-|–|ー|－|から)$/.test(line.slice(a, b).replace(/[(（][日月火水木金土](曜日?)?[)）]|(午前|午後)?\d{1,2}(:\d{2}|時(\d{1,2}分)?)|[\s　]/g, ''));
+      const sepBefore = mi > 0 && gapIs(ms[mi - 1].index + ms[mi - 1][0].length, m.index);
+      const sepAfter = mi + 1 < ms.length && gapIs(m.index + m[0].length, ms[mi + 1].index);
+      const role = sepBefore ? 'end' : sepAfter ? 'start' : '';
+      const deadline = role === 'end' || (!role && /締切|締め切り|〆切|期限|まで|迄/.test(line));
+      let label = line.replace(/[（(][^）)]{3,}[）)]/g, ' ').replace(/以降|順次|頃|ごろ/g, ' ').replace(DATE, ' ').replace(TIME, ' ').replace(/[(（][日月火水木金土](曜日?)?[)）]/g, ' ')
         .replace(/[〜~\-–—:：\/／、,。・|｜()（）【】\[\]]+/g, ' ').replace(/\s+/g, ' ').trim()
         // 文の形なら言い切りの部分を落とす（「出欠票は11月7日までに担任へ提出してください」→「出欠票は担任へ提出」）
         .replace(/(を|して|し)?(ください|下さい|お願いします|お願いいたします|お願い致します)。?$/, '').replace(/\s*(までに|までは|まで|迄に|迄)\s*/g, ' ');
@@ -629,14 +642,23 @@ function findDates(raw, now = new Date(), opt = {}) {
       // 日付だけの行は、すぐ上の見出し行（「■説明会」など）を名前にする
       let head = '';
       if (!label && li > 0 && !hasDate(lines[li - 1]) && !/\d{1,2}(:\d{2}|時)/.test(lines[li - 1])) { const h = cleanTitle(lines[li - 1]); if (wordy(h) && h.length <= 24 && h !== docTitle) head = h; }
+      if (head && !label && DATE_KINDS.some(x => x.re.test(head))) { label = head.replace(/(の)?(ご)?(連絡|案内|お知らせ)$/, ''); head = ''; }
+      if (role && label) label = /期間$/.test(label) ? label.replace(/期間$/, role === 'start' ? '開始' : '終了') : label + (role === 'start' ? '開始' : '終了');
       if (label.length > 24) label = label.slice(0, 24);
+      // 期日の種類（抽選発表・購入期限・応募締切・応募開始）。見出し行の言葉も手がかりにする
+      const ctx = line + ' ' + (head || (li > 0 && !hasDate(lines[li - 1]) ? lines[li - 1] : ''));
+      let kd = DATE_KINDS.find(x => x.kind === 'result' && x.re.test(ctx));
+      if (!kd) kd = DATE_KINDS.find(x => x.kind === 'buy' && x.re.test(ctx));
+      if (!kd && role) kd = DATE_KINDS.find(x => x.kind === (role === 'start' ? 'open' : 'close'));
+      if (!kd) kd = DATE_KINDS.find(x => x.re.test(ctx));
+      if (kd && kd.kind === 'buy' && role === 'start') kd = { ...kd, tag: '購入開始', prio: 2 };
       const base = head || (!label ? docTitle : docTitle && label.length <= 8 && !label.includes(docTitle) && !docTitle.includes(label) ? `${docTitle}の${label}` : label);
       (times.length ? times : [null]).forEach(t => {
         const due = new Date(y, mo - 1, d, t ? t.h : 9, t ? t.mm : 0);
         const title = (t && t.word && times.length > 1 ? `${base || 'リマインダー'} ${t.word}` : base) || 'リマインダー';
         const k = fmtLocal(due) + title;
         if (seen.has(k)) return; seen.add(k);
-        out.push({ due, title, src: line.length > 60 ? line.slice(0, 59) + '…' : line, hasTime: !!t, deadline, past: due < now });
+        out.push({ due, title, src: line.length > 60 ? line.slice(0, 59) + '…' : line, hasTime: !!t, deadline, past: due < now, kind: kd ? kd.kind : '', tag: kd ? kd.tag : '', prio: kd ? kd.prio : 3 });
       });
     });
   }

@@ -494,6 +494,9 @@ html, :root.sheet-open body { background: #000; }
 .sc-c .sr { font-size: 12px; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-go { min-height: 50px; border-radius: 12px; background: var(--blue); color: #fff; font-size: 17px; font-weight: 700; }
 .sc-go:disabled { opacity: .4; }
+.sc-tag { display: inline-block; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 6px; border-radius: 6px; margin-right: 6px; vertical-align: 1px; background: var(--fill, rgba(120,120,128,.16)); color: var(--fg2); }
+.sc-tag.k-result { background: var(--blue); color: #fff; }
+.sc-tag.k-close, .sc-tag.k-buy { background: rgba(255,59,48,.14); color: #d70015; }
 .sc-pg { width: 100%; margin-top: 10px; min-height: 44px; border-radius: 12px; background: var(--card); color: var(--blue); font-size: 15px; font-weight: 600; }
 .sc-pg:disabled { color: var(--fg2); }
 </style>
@@ -1444,9 +1447,11 @@ function scanText() {
   const text = $('#scText').value;
   const keep = new Map(SC.cands.map((c, i) => [fmtLocal(c.due) + c.title, SC.sel.has(i)]));
   if (!text.trim()) SC.hint = '';
-  SC.cands = findDates(text, new Date(), { title: SC.hint }); SC.titles = {};
+  // 抽選発表 → 応募締切・購入期限 → その他 の順に並べる（同じ種類の中は日付順）。過ぎたものは最後
+  SC.cands = findDates(text, new Date(), { title: SC.hint }).sort((a, b) => a.past - b.past || a.prio - b.prio || a.due - b.due); SC.titles = {};
   const up = SC.cands.filter(c => !c.past).length;
-  SC.sel = new Set(SC.cands.map((c, i) => [c, i]).filter(([c]) => { const k = fmtLocal(c.due) + c.title; return keep.has(k) ? keep.get(k) : !c.past && up <= 3; }).map(([, i]) => i));
+  // 抽選発表・締切・購入期限は最初から選んでおく。ほかは候補が少ないときだけ選ぶ
+  SC.sel = new Set(SC.cands.map((c, i) => [c, i]).filter(([c]) => { const k = fmtLocal(c.due) + c.title; return keep.has(k) ? keep.get(k) : !c.past && (c.prio <= 1 || up <= 3); }).map(([, i]) => i));
   const m = text.match(/https?:\/\/[^\s<>"'）)]+/); SC.url = m ? normUrl(m[0]) : null;
   if (SC.url !== SC.pageUrl) SC.pageMsg = '';
   drawScan();
@@ -1524,7 +1529,7 @@ function drawScan() {
   out.innerHTML = `<div class="fgroup-h">見つけた期日（登録するものを選ぶ）</div><div class="fgroup">${SC.cands.map((c, i) => `<div class="sc-c ${SC.sel.has(i) ? 'on' : ''} ${c.past ? 'past' : ''}">
       <button type="button" class="ck" data-i="${i}" aria-pressed="${SC.sel.has(i)}" aria-label="${esc(c.title)}を登録する"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
       <div class="bd"><input type="text" data-ti="${i}" value="${esc(SC.titles[i] ?? c.title)}" aria-label="タイトル">
-        <span class="wh">${esc(fmtDue(c.due))}${c.hasTime ? '' : '（時刻がないので9:00に通知）'}${c.past ? ' ・ 過ぎています' : ''}</span>
+        <span class="wh">${c.tag ? `<b class="sc-tag k-${c.kind}">${esc(c.tag)}</b>` : ''}${esc(fmtDue(c.due))}${c.hasTime ? '' : '（時刻がないので9:00に通知）'}${c.past ? ' ・ 過ぎています' : ''}</span>
         <span class="sr">「${esc(c.src)}」</span></div></div>`).join('')}</div>
     ${SC.url ? `<div class="fgroup-f">通知をタップすると ${esc(hostOf(SC.url))} を開きます</div>` : ''}${pg}
     <div style="margin-top:14px"><button type="button" class="sc-go" id="scGo" style="width:100%" ${n ? '' : 'disabled'}>${n ? (n === 1 ? '確認へ進む' : `${n}件を登録`) : '登録する期日を選んでください'}</button></div>`;
