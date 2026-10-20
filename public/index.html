@@ -706,7 +706,8 @@ function closeSwipe(anim = true) {
     if (s.wrap.classList.contains('armed')) {
       s.wrap.classList.remove('armed');
       s.row.classList.add('settle'); s.row.style.transform = '';
-      setTimeout(() => { delete s.wrap.dataset.dir; s.row.querySelector('.check')?.click(); }, 180);
+      // 指を離した直後の誤クリックは捨てるが、ここで送る完了のクリックまで捨てないよう解除してから押す
+      setTimeout(() => { delete s.wrap.dataset.dir; swClickBlock = 0; s.row.querySelector('.check')?.click(); }, 180);
     } else if (s.dx < -s.rw * .4 || v < -.5) {
       s.row.classList.add('settle'); s.row.style.transform = `translateX(${-s.rw}px)`;
       swOpen = { wrap: s.wrap, row: s.row };
