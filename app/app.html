@@ -309,9 +309,9 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 
 /* 押した感触（ui-ux-pro-max: press-feedback / scale-feedback / spring-physics）
    押した瞬間に 80ms で縮み、離すとばねで戻る。レイアウトは動かさない */
-.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn {
+.newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn, .mic, .calbtn, .cal-q button, .cal-t button, .cal-r button, .cal-mh button {
   transition: transform .5s var(--spring), background-color .25s var(--ease-out), color .25s, box-shadow .25s var(--ease-out), opacity .3s var(--ease-out), filter .3s var(--ease-out); }
-:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
+:is(.newbtn, .send, .linkbtn, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .adv-add button, .gstep .rm, .inl button, .guide code, .sw-btn, .mic, .calbtn, .cal-q button, .cal-t button, .cal-r button, .cal-mh button).is-pressed:not(:disabled) { transform: scale(.9); filter: grayscale(1) brightness(.88); opacity: .6; transition-duration: var(--t-press); }
 .tile.is-pressed { transform: scale(.94); filter: grayscale(1); background-color: color-mix(in srgb, var(--card) 85%, var(--fg)); transition-duration: var(--t-press); }
 .tile .ic { transition: transform .55s var(--spring); }
 .tile.is-pressed .ic { transform: scale(1.15) rotate(-8deg); transition-duration: .15s; }
@@ -411,6 +411,62 @@ html, :root.sheet-open body { background: #000; }
   .is-pressed { transform: none !important; opacity: .6; }
   .bub.bot.pop .tx::after { display: none; }
   :root.sheet-open .app { transform: none; border-radius: 0; } }
+/* 音声入力: 入力欄の右端に置くマイク。聞き取り中は赤くなり、波紋が広がる */
+.qin { flex: 1; min-width: 0; position: relative; display: flex; }
+.qin input { flex: 1; min-width: 0; padding-right: 46px !important; }
+.mic { position: absolute; right: 5px; top: 50%; margin-top: -20px; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); z-index: 1; }
+.mic svg { width: 22px; height: 22px; }
+.mic.rec { color: #fff; background: var(--red); }
+.mic.rec::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--red); z-index: -1; animation: ring 1.4s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .mic.rec::before { animation: none; } }
+/* カレンダーで日時を選ぶ。開いているシートの上に重ねて出す */
+.cal-wrap { position: fixed; left: 0; right: 0; top: 0; height: var(--vvh, 100%); background: rgba(0,0,0,.35); z-index: 50; display: flex; align-items: flex-end; justify-content: center; animation: scrimIn .35s var(--ease-out); }
+.cal { background: var(--bg); width: 100%; max-width: 520px; max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); overflow-y: auto; overscroll-behavior: contain; border-radius: 16px 16px 0 0; animation: up .52s var(--ease-sheet); box-shadow: 0 -8px 30px rgba(0,0,0,.12); }
+.cal-wrap.closing { pointer-events: none; animation: scrimOut var(--t-exit) var(--ease-in) forwards; }
+.cal-wrap.closing .cal { animation: down var(--t-exit) var(--ease-in) forwards; }
+@media (prefers-reduced-motion: reduce) { .cal, .cal-wrap { animation: none; } }
+.cal .sheet-h { position: sticky; top: 0; z-index: 1; background: var(--bg); }
+.cal-b { display: flex; flex-direction: column; gap: 12px; padding-block: 12px calc(18px + env(safe-area-inset-bottom, 0px)); }
+.cal-sum { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; background: var(--card); border-radius: 12px; padding: 12px 14px; }
+.cal-sum b { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cal-sum span { font-size: 13px; color: var(--fg2); text-align: right; }
+.cal-sum.past span { color: var(--red); font-weight: 600; }
+.cal-q { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.cal-q button, .cal-t button, .cal-r button { flex: none; min-height: 36px; padding: 0 14px; border-radius: 18px; background: var(--card); color: var(--fg); font-size: 14px; font-weight: 600; }
+.cal-q button.on, .cal-t button.on, .cal-r button.on { background: var(--red); color: #fff; }
+.cal-m { background: var(--card); border-radius: 12px; padding: 4px 6px 8px; }
+.cal-mh { display: flex; align-items: center; justify-content: space-between; padding-left: 10px; font-size: 17px; font-weight: 700; }
+.cal-mh span { display: flex; }
+.cal-mh button { width: 44px; height: 44px; display: grid; place-items: center; color: var(--red); }
+.cal-mh svg { width: 20px; height: 20px; }
+.cal-g { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-g .wdh { text-align: center; font-size: 12px; font-weight: 600; color: var(--fg2); padding-bottom: 2px; }
+.cal-g .su, .cal-g .ho { color: var(--red); }
+.cal-g .sa { color: var(--blue); }
+.cal-g button { height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 17px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cal-g button.su, .cal-g button.ho { color: var(--red); }
+.cal-g button.sa { color: var(--blue); }
+.cal-g button span { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; transition: background-color .2s, color .2s, transform .45s var(--spring); }
+.cal-g button i { width: 5px; height: 5px; border-radius: 50%; }
+.cal-g button.busy i { background: var(--fg3); }
+.cal-g button.today span { color: var(--red); font-weight: 700; }
+.cal-g button.sel span { background: var(--red); color: #fff; font-weight: 700; }
+.cal-g button:disabled { color: var(--fg3); }
+.cal-g button.is-pressed span { transform: scale(.86); transition-duration: var(--t-press); }
+.cal-tm { background: var(--card); border-radius: 12px; padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.cal-tm .r1 { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
+.cal-tm input[type=time] { font-size: 20px; font-weight: 700; border: 0; background: var(--fill); border-radius: 8px; padding: 6px 10px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cal-t { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.cal-t button { padding: 0; border-radius: 9px; background: var(--fill); }
+.cal-r { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.cal-r button { padding: 0 4px; border-radius: 10px; font-size: 13px; }
+.cal-note { font-size: 12px; color: var(--fg2); text-align: center; }
+.calbtn { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; color: var(--red); background: var(--fill); flex: none; }
+.calbtn svg { width: 20px; height: 20px; }
+.dtw { display: flex; align-items: center; gap: 6px; max-width: 72%; }
+.dtw input[type=datetime-local] { max-width: 100%; min-width: 0; }
+.chat-in .chips button.calpick { display: inline-flex; align-items: center; gap: 6px; color: var(--red); }
+.chat-in .chips button.calpick svg { width: 18px; height: 18px; }
 </style>
 
 <div class="app" id="app">
@@ -430,7 +486,8 @@ html, :root.sheet-open body { background: #000; }
     <div class="urlrow" id="urlRow" hidden><span class="lab">通知から開く</span><input id="quickUrl" type="url" inputmode="url" placeholder="https://…（任意）" aria-label="通知をタップしたときに開くURL"></div>
     <form class="qform" id="qform" autocomplete="off" novalidate>
       <button type="button" class="linkbtn" id="linkBtn" aria-pressed="false" aria-label="URLを付ける"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg></button>
-      <input id="quick" type="text" enterkeyhint="send" placeholder="例: 明日9時に資料送る" aria-label="話し言葉でリマインダーを追加">
+      <button type="button" class="linkbtn" id="calBtn" aria-label="カレンダーで日時を選ぶ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></button>
+      <span class="qin"><input id="quick" type="text" enterkeyhint="send" placeholder="例: 明日9時に資料送る" aria-label="話し言葉でリマインダーを追加"><button type="button" class="mic" data-mic="quick" aria-pressed="false" aria-label="話して入力"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button></span>
       <button class="send" id="sendBtn" type="submit" aria-label="追加" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
     </form>
   </div>
@@ -449,6 +506,7 @@ const FORMAT = 'rimain.reminders';
 const FORMAT_VERSION = 1;
 const COLORS = ['blue', 'red', 'orange', 'green', 'teal', 'purple', 'indigo', 'gray'];
 const I = {
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
   rep: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 21V4h1v.5C8 3 10 3.5 12 4.5s4 1.5 7 0v10c-3 1.5-5 1-7 0s-4-1.5-6 0V21z"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
@@ -637,8 +695,8 @@ function dropUnder(u) { if (u) u.remove(); $('#app').classList.remove('swiping')
 })();
 // 触覚フィードバック。Android は vibrate、iOS 18 以降の Safari はスイッチ型チェックボックスの切り替えで軽く震える
 // 押した感触: 指が触れた瞬間に縮め、離すと少し膨らんで戻す。速いタップでも最低 100ms は見せる
-const PRESS_SEL = '.nl-ok, .pill, .sw-btn, .newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .navbtn, .lrow, .btn, .row-main, .check';
-const BOUNCE_SEL = '.pill, .navbtn, .addlist, .seg button, .newbtn, .send, .linkbtn, .tile, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .wd button, .colors button, .nl-ok';
+const PRESS_SEL = '.mic, .calbtn, .cal-q button, .cal-t button, .cal-r button, .cal-mh button, .cal-g button, .nl-ok, .pill, .sw-btn, .newbtn, .send, .linkbtn, .tile, .addlist, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .bn-acts a.btnlike, .wd button, .colors button, .seg button, .gstep .rm, .inl button, .guide code, .navbtn, .lrow, .btn, .row-main, .check';
+const BOUNCE_SEL = '.mic, .calbtn, .cal-q button, .cal-t button, .cal-r button, .pill, .navbtn, .addlist, .seg button, .newbtn, .send, .linkbtn, .tile, .ex, .act-btn, .chat-in .chips button, .chat-in .next, .bn-acts button, .wd button, .colors button, .nl-ok';
 (() => {
   let cur = null, t0 = 0, sx = 0, sy = 0;
   const release = (bounce) => {
@@ -995,7 +1053,7 @@ function openWizard(init) {
   openSheet(`<div class="sheet-h gut"><button class="navbtn" data-act="cancel">キャンセル</button><div class="t">新規リマインダー</div><span></span></div>
     <div class="chat gut" id="wChat" aria-live="polite"></div>
     <div class="chat-in gut"><div class="steps" id="wSteps"></div><div class="chips" id="wChips"></div>
-      <form id="wForm" autocomplete="off" novalidate><input id="wIn" type="text" enterkeyhint="next" aria-label="返事を入力"><button class="next" id="wNext" type="submit">次へ</button></form></div>`, sh => {
+      <form id="wForm" autocomplete="off" novalidate><span class="qin"><input id="wIn" type="text" enterkeyhint="next" aria-label="返事を入力"><button type="button" class="mic" data-mic="wIn" aria-pressed="false" aria-label="話して入力">${I.mic}</button></span><button class="next" id="wNext" type="submit">次へ</button></form></div>`, sh => {
     sh.classList.add('tall');
     sh.querySelector('[data-act="cancel"]').onclick = () => { W = null; closeSheet(); };
     sh.querySelector('#wForm').addEventListener('submit', e => { e.preventDefault(); wizardAnswer(sh.querySelector('#wIn').value); });
@@ -1024,7 +1082,7 @@ function wizardPrompt() {
     inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の件、資料を送る'; next.textContent = '次へ'; chips.innerHTML = '';
   } else if (W.step === 'when') {
     inp.type = 'text'; inp.inputMode = 'text'; inp.placeholder = '例: 明日の9時、毎週月曜8時、30分後'; next.textContent = '次へ';
-    chips.innerHTML = (W.sugg ? `<div class="wg"><span class="wg-h">入力から読み取った日時</span><button type="button" class="sugg" data-ans="__sugg">${esc(whenText(W.sugg.due, W.sugg.rule))}</button></div>` : '') + whenChips('data-ans') + '<div class="wg"><button type="button" class="skip" data-ans="__none">日時なし</button></div>';
+    chips.innerHTML = (W.sugg ? `<div class="wg"><span class="wg-h">入力から読み取った日時</span><button type="button" class="sugg" data-ans="__sugg">${esc(whenText(W.sugg.due, W.sugg.rule))}</button></div>` : '') + `<div class="wg"><button type="button" class="calpick" data-ans="__cal">${I.cal}カレンダーで選ぶ</button></div>` + whenChips('data-ans') + '<div class="wg"><button type="button" class="skip" data-ans="__none">日時なし</button></div>';
     chips.classList.add('when');
   } else if (W.step === 'url') {
     inp.type = 'text'; inp.inputMode = 'url'; inp.autocapitalize = 'off'; inp.placeholder = 'https://…（なければ「なし」）'; next.textContent = '次へ';
@@ -1055,6 +1113,10 @@ function wizardAnswer(raw, label) {
     wizardMe('1件として登録'); return afterWhat(W.inputs[W.inputs.length - 1], now);
   }
   if (W.step === 'when') {
+    if (raw === '__cal') return openCal(W.sugg && W.sugg.due, { repeat: true, future: true, onPick: ({ due, rule }) => {
+      if (!W || W.step !== 'when') return;
+      wizardMe(whenText(due, rule)); W.due = due; W.rule = rule; wizardBot(`${whenText(due, rule)} ですね。`); askUrl();
+    } });
     if (raw === '__none') { wizardMe('日時なし'); wizardBot('日時なしでリストに入れておきますね。'); W.due = null; W.rule = null; return askUrl(); }
     if (raw === '__sugg' && W.sugg) { wizardMe(label || whenText(W.sugg.due, W.sugg.rule)); W.due = W.sugg.due; W.rule = W.sugg.rule; wizardBot(`${whenText(W.due, W.rule)} ですね。`); return askUrl(); }
     if (!v) { wizardBot('いつ通知するか入力するか、下の候補を選んでください'); return; }
@@ -1110,6 +1172,151 @@ function openWizardFrom(w) {
   W.log.push({ who: 'bot', text: '直したい項目があれば、確認画面でそのまま変更できます。URL を変えるならここで入力してください。' });
   drawChat(); wizardPrompt();
 }
+
+// ---- 音声入力 ----
+// Safari の音声認識を使い、聞き取った言葉を入力欄に書き込む（あとは手で打ったときと同じ流れ）。
+// ホーム画面のアプリでは使えないことがあるので、そのときはキーボードのマイクを案内する
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voice = null;
+function stopVoice() { if (voice) try { voice.rec.stop(); } catch {} }
+function startVoice(inp, btn) {
+  if (voice) return stopVoice();
+  const fallback = msg => { toast(esc(msg)); inp.focus(); };
+  if (!SpeechRec) return fallback('この画面では音声認識が使えません。キーボードのマイクで話してください');
+  let rec; try { rec = new SpeechRec(); } catch { return fallback('音声認識を始められませんでした。キーボードのマイクで話してください'); }
+  const base = inp.value.trim();
+  let fin = '';
+  rec.lang = 'ja-JP'; rec.interimResults = true; rec.continuous = false;
+  rec.onresult = e => {
+    let tmp = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) fin += t; else tmp += t; }
+    inp.value = (base ? base + ' ' : '') + fin + tmp;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  rec.onerror = e => {
+    if (e.error === 'aborted') return;
+    if (e.error === 'no-speech') return toast('声が聞き取れませんでした。もう一度マイクを押して話してください');
+    fallback(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'マイクが使えませんでした。キーボードのマイクで話すこともできます' : '音声認識が使えませんでした。キーボードのマイクで話してください');
+  };
+  rec.onend = () => { if (voice && voice.rec === rec) voice = null; btn.classList.remove('rec'); btn.setAttribute('aria-pressed', 'false'); btn.setAttribute('aria-label', '話して入力'); };
+  voice = { rec, btn };
+  btn.classList.add('rec'); btn.setAttribute('aria-pressed', 'true'); btn.setAttribute('aria-label', '聞き取りを止める');
+  try { rec.start(); } catch { voice = null; btn.classList.remove('rec'); btn.setAttribute('aria-pressed', 'false'); fallback('音声認識を始められませんでした。キーボードのマイクで話してください'); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-mic]'); if (!b) return;
+  e.preventDefault(); const inp = document.getElementById(b.dataset.mic); if (inp) startVoice(inp, b);
+});
+
+// ---- カレンダーで日時を選ぶ ----
+// よく使う日・月のカレンダー・よく使う時刻から選ぶ。結果は話し言葉と同じ書き方の文（例「10月28日から毎週水曜 9:00」）にして
+// パーサーに通すので、繰り返しの計算は文章で登録したときと同じになる
+let CAL = null;
+function calText(c) {
+  const d = c.d, now = new Date();
+  const day = `${d.getFullYear() !== now.getFullYear() ? d.getFullYear() + '年' : ''}${d.getMonth() + 1}月${d.getDate()}日`;
+  const rep = { day: '毎日', week: `毎週${WD[d.getDay()]}曜`, month: `毎月${d.getDate()}日` }[c.rep];
+  return rep ? `${day}から${rep} ${hm(d)}` : `${day} ${hm(d)}`;
+}
+function openCal(init, opt = {}) {
+  const now = new Date();
+  let d = init instanceof Date && !isNaN(init) ? new Date(init) : null;
+  if (!d) { d = new Date(now); if (now.getHours() < 21) d.setHours(now.getHours() + 1, 0, 0, 0); else { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); } }
+  d.setSeconds(0, 0);
+  CAL = { d, y: d.getFullYear(), m: d.getMonth(), rep: 'none', opt };
+  document.querySelector('#calWrap')?.remove();
+  const w = document.createElement('div'); w.className = 'cal-wrap'; w.id = 'calWrap';
+  w.innerHTML = `<div class="cal" role="dialog" aria-modal="true" aria-label="日時を選ぶ"><div class="sheet-h gut"><button class="navbtn" data-c="cancel">キャンセル</button><div class="t">${esc(opt.title || '日時')}</div><button class="navbtn r" data-c="ok">完了</button></div><div class="cal-b gut" id="calB"></div></div>`;
+  document.body.appendChild(w);
+  w.addEventListener('click', e => {
+    if (e.target === w) return closeCal();
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    const c = CAL, ds = b.dataset;
+    const setDay = (y, m, day) => { c.d = new Date(y, m, day, c.d.getHours(), c.d.getMinutes()); c.y = y; c.m = m; };
+    if (ds.c === 'cancel') return closeCal();
+    if (ds.c === 'ok') return pickCal();
+    if (ds.day) { const [y, m, day] = ds.day.split('-').map(Number); setDay(y, m - 1, day); }
+    else if (ds.q != null) { const t = new Date(); t.setDate(t.getDate() + +ds.q); setDay(t.getFullYear(), t.getMonth(), t.getDate()); }
+    else if (ds.nav) { const t = new Date(c.y, c.m + +ds.nav, 1); c.y = t.getFullYear(); c.m = t.getMonth(); }
+    else if (ds.t) { const [h, mi] = ds.t.split(':').map(Number); c.d.setHours(h, mi, 0, 0); }
+    else if (ds.r) c.rep = ds.r;
+    else return;
+    drawCal();
+  });
+  w.addEventListener('change', e => {
+    if (e.target.id !== 'calTime' || !e.target.value) return;
+    const [h, mi] = e.target.value.split(':').map(Number); CAL.d.setHours(h, mi, 0, 0); drawCal();
+  });
+  drawCal();
+}
+function drawCal() {
+  const c = CAL, B = document.querySelector('#calB'); if (!c || !B) return;
+  const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d = c.d, key = x => ymd(x), selK = key(d);
+  const busy = new Set(S.reminders.filter(r => !r.done && r.due).map(r => r.due.slice(0, 10)));
+  const past = d < now;
+  const diff = daysBetween(now, d);
+  const rel = diff === 0 ? '今日' : diff === 1 ? '明日' : diff === 2 ? 'あさって' : diff > 0 ? `${diff}日後` : `${-diff}日前`;
+  const hol = holidayName(d);
+  // 来週の月曜・今週末（土曜、土日なら次の土曜）
+  const dow = today.getDay();
+  const quick = [['今日', 0], ['明日', 1], ['今週末', (6 - dow + 7) % 7 || 7], ['来週月曜', ((8 - dow) % 7) || 7], ['1週間後', 7]];
+  const first = new Date(c.y, c.m, 1), days = new Date(c.y, c.m + 1, 0).getDate();
+  let cells = WD.split('').map((w, i) => `<span class="wdh ${i === 0 ? 'su' : i === 6 ? 'sa' : ''}">${w}</span>`).join('');
+  cells += '<span></span>'.repeat(first.getDay());
+  for (let n = 1; n <= days; n++) {
+    const x = new Date(c.y, c.m, n), k = key(x), wd = x.getDay();
+    const cls = [wd === 0 ? 'su' : wd === 6 ? 'sa' : '', holidayName(x) ? 'ho' : '', k === key(today) ? 'today' : '', k === selK ? 'sel' : '', busy.has(k) ? 'busy' : ''].filter(Boolean).join(' ');
+    cells += `<button type="button" class="${cls}" data-day="${c.y}-${c.m + 1}-${n}" ${c.opt.future && x < today ? 'disabled' : ''} aria-label="${c.m + 1}月${n}日${holidayName(x) ? ' ' + holidayName(x) : ''}${busy.has(k) ? ' 予定あり' : ''}" aria-pressed="${k === selK}"><span>${n}</span><i></i></button>`;
+  }
+  const times = ['9:00', '12:00', '18:00', '20:00', '21:30'];
+  const reps = [['none', '1回だけ'], ['day', '毎日'], ['week', `毎週${WD[d.getDay()]}`], ['month', `毎月${d.getDate()}日`]];
+  B.innerHTML = `<div class="cal-sum ${past ? 'past' : ''}"><b>${d.getMonth() + 1}月${d.getDate()}日(${WD[d.getDay()]}) ${hm(d)}</b><span>${past ? 'この時刻は過ぎています' : rel}${hol ? ' ・ ' + hol : ''}</span></div>
+    <div class="cal-q">${quick.map(([l, o]) => { const t = new Date(today); t.setDate(t.getDate() + o); return `<button type="button" data-q="${o}" class="${key(t) === selK ? 'on' : ''}">${l}</button>`; }).join('')}</div>
+    <div class="cal-m"><div class="cal-mh">${c.y}年${c.m + 1}月<span><button type="button" data-nav="-1" aria-label="前の月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><button type="button" data-nav="1" aria-label="次の月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button></span></div>
+      <div class="cal-g">${cells}</div></div>
+    <div class="cal-tm"><div class="r1"><label for="calTime">時刻</label><input type="time" id="calTime" value="${pad(d.getHours())}:${pad(d.getMinutes())}"></div>
+      <div class="cal-t">${times.map(t => `<button type="button" data-t="${t}" class="${t === hm(d) ? 'on' : ''}">${t}</button>`).join('')}</div></div>
+    ${c.opt.repeat ? `<div class="cal-r">${reps.map(([id, l]) => `<button type="button" data-r="${id}" class="${c.rep === id ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
+    <div class="cal-note">点のある日は、ほかの予定が入っています</div>`;
+  const ok = document.querySelector('#calWrap [data-c="ok"]'); if (ok) ok.disabled = !!(c.opt.future && past && c.rep === 'none');
+}
+function pickCal() {
+  const c = CAL; if (!c) return;
+  let due = new Date(c.d), rule = null;
+  const text = calText(c);
+  if (c.rep !== 'none') { const p = parseInput(text, new Date()); if (p.due) { due = p.due; rule = p.rule; } }
+  closeCal();
+  c.opt.onPick && c.opt.onPick({ due, rule, text });
+}
+function closeCal() {
+  const w = document.querySelector('#calWrap'); CAL = null; if (!w) return;
+  if (reduceMotion()) return w.remove();
+  w.classList.add('closing'); setTimeout(() => w.remove(), 220);
+}
+// 確認画面・グループの日時欄の横のボタン
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-cal]'); if (!b) return;
+  const inp = document.getElementById(b.dataset.cal); if (!inp) return;
+  openCal(parseLocal(inp.value), { onPick: ({ due }) => {
+    inp.value = fmtLocal(due);
+    inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
+  } });
+});
+// ホームの入力欄: 選んだ日時を文の頭に入れる。前に入れた日時は置き換える
+let calToken = '';
+$('#calBtn').addEventListener('click', () => {
+  const q = $('#quick');
+  const p = q.value.trim() ? parseInput(q.value.trim(), new Date()) : null;
+  openCal(p && p.due, { repeat: true, future: true, onPick: ({ text }) => {
+    let v = q.value.trim();
+    if (calToken && v.includes(calToken)) v = v.replace(calToken, '').trim();
+    calToken = text;
+    q.value = v ? `${text} ${v}` : `${text} `;
+    updatePreview();
+    if (!v) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+  } });
+});
 
 // ---- トースト ----
 let toastTimer;
@@ -1303,7 +1510,7 @@ function openDetail(id, opts = {}) {
       <div class="f"><input type="text" id="dNl" placeholder="例: 隔週木曜 19時 祝日除く" aria-label="文章で変更"></div>
     </div><div class="fgroup-f" id="dNlPv">入力すると日時と繰り返しを上書きします。</div></div>
     <div><div class="fgroup-h">日時</div><div class="fgroup">
-      <div class="f"><span class="lab">次の通知</span><input type="datetime-local" id="dDue" value="${r.due || ''}"></div>
+      <div class="f"><span class="lab">次の通知</span><span class="dtw"><input type="datetime-local" id="dDue" value="${r.due || ''}"><button type="button" class="calbtn" data-cal="dDue" aria-label="カレンダーで選ぶ">${I.cal}</button></span></div>
       <div class="f"><span class="lab">繰り返し</span><select id="dKind">
         ${opt('none', 'しない', k)}${opt('daily', '日ごと（毎日・隔日・N日）', k)}${opt('weekly', '週ごと（曜日・隔週）', k)}${opt('monthly', '月ごと（日付・末日）', k)}${opt('monthlyNth', '月ごと（第N曜日）', k)}${opt('yearly', '毎年', k)}${opt('parity', '偶数日・奇数日', k)}${opt('hourly', '時間ごと', k)}${opt('minutely', '分ごと', k)}${opt('afterDone', '完了してから', k)}
       </select></div>
@@ -1486,7 +1693,7 @@ function openGroupEditor(id, opts = {}) {
     </div></div>
     ${isNew ? `<div><div class="fgroup-h">文章でまとめて入力</div><div class="fgroup"><div class="inl"><input type="text" id="gNl" placeholder="9時から 千葉、東京、神奈川 を30分おき" aria-label="文章でまとめて入力"><button type="button" id="gNlGo">反映</button></div></div><div class="fgroup-f" id="gNlMsg">「、」で区切って並べると項目に分けます。</div></div>` : ''}
     <div><div class="fgroup-h">タイミング</div><div class="fgroup">
-      <div class="f"><span class="lab">最初の通知</span><input type="datetime-local" id="gStart" value="${esc(G.due || '')}"></div>
+      <div class="f"><span class="lab">最初の通知</span><span class="dtw"><input type="datetime-local" id="gStart" value="${esc(G.due || '')}"><button type="button" class="calbtn" data-cal="gStart" aria-label="カレンダーで選ぶ">${I.cal}</button></span></div>
       <div class="seg" role="group" aria-label="間隔の決め方"><button type="button" data-sp="equal" aria-pressed="${G.spacing === 'equal'}">等間隔</button><button type="button" data-sp="each" aria-pressed="${G.spacing === 'each'}">項目ごとに設定</button></div>
       ${G.spacing === 'equal' ? `<div class="f"><span class="lab">前の通知から</span><input type="number" id="gEvery" min="0" value="${G.every.value}">${unitSel('id="gEveryU"', G.every.unit)}<span class="val">後</span></div>` : ''}
     </div></div>
