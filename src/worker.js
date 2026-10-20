@@ -23,6 +23,43 @@ function checkTimes(times) {
   const out = [...new Set(times.map(Number).filter(t => Number.isFinite(t) && t > now - 60000 && t < now + MAX_AHEAD).map(t => Math.round(t)))];
   return out.sort((a, b) => a - b).slice(0, MAX_TIMES);
 }
+// ---- ページの取得（設定でオンにした人だけが使う。ページは保存せず、そのまま端末へ返す） ----
+const PAGE_MAX = 1536 * 1024, PAGE_TIMEOUT = 8000;
+function checkPageUrl(raw, self) {
+  let u; try { u = new URL(raw); } catch (e) { throw bad('URL が正しくありません'); }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password) throw bad('http/https のページだけ読めます');
+  if (u.port && !['80', '443'].includes(u.port)) throw bad('このポートのページは読めません');
+  const h = u.hostname.toLowerCase();
+  // IP 直打ち・社内向けの名前・自分自身は読まない（ほかのサーバーを探る踏み台にされないように）
+  if (!h.includes('.') || /^[\d.]+$/.test(h) || h.startsWith('[') || /(\.local|\.internal|\.localhost|\.lan|\.home|\.arpa)$/.test(h) || h === self) throw bad('このページは読めません');
+  return u;
+}
+async function fetchPage(raw, self) {
+  let u = checkPageUrl(raw, self), res;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), PAGE_TIMEOUT);
+  try {
+    for (let hop = 0; ; hop++) {
+      res = await fetch(u, { redirect: 'manual', signal: ctl.signal, headers: { 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1 RE-main', accept: 'text/html,application/xhtml+xml', 'accept-language': 'ja,en;q=0.5' } });
+      if (res.status < 300 || res.status >= 400 || !res.headers.get('location')) break;
+      if (hop >= 4) throw bad('転送が多すぎます', 502);
+      u = checkPageUrl(new URL(res.headers.get('location'), u).href, self);
+    }
+    if (!res.ok) throw bad(`ページを開けませんでした（${res.status}）`, 502);
+    const type = res.headers.get('content-type') || '';
+    if (!/text\/html|application\/xhtml|text\/plain/i.test(type)) throw bad('Web ページではありません', 415);
+    const reader = res.body.getReader(), parts = []; let n = 0;
+    while (n < PAGE_MAX) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
+    reader.cancel().catch(() => {});
+    const out = new Uint8Array(Math.min(n, PAGE_MAX)); let o = 0;
+    for (const p of parts) { const k = Math.min(p.length, out.length - o); out.set(p.subarray(0, k), o); o += k; if (o >= out.length) break; }
+    return { body: out, type, url: u.href };
+  } catch (e) {
+    if (e.name === 'AbortError') throw bad('ページの読み込みに時間がかかりすぎました', 504);
+    if (e.status) throw e;
+    throw bad('ページを開けませんでした', 502);
+  } finally { clearTimeout(timer); }
+}
+
 async function sha256(s) {
   const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -35,6 +72,14 @@ export default {
     try {
       if (url.pathname === '/api/vapid' && req.method === 'GET') return json({ publicKey: await keysStub(env).publicKey() });
       if (req.method !== 'POST') throw bad('method', 405);
+      if (url.pathname === '/api/page') {
+        // このアプリの画面からの呼び出しだけ受け付ける
+        if (req.headers.get('origin') !== url.origin) throw bad('forbidden', 403);
+        const { url: target } = await req.json().catch(() => ({}));
+        if (typeof target !== 'string' || target.length > 2048) throw bad('URL がありません');
+        const pg = await fetchPage(target, url.hostname);
+        return new Response(pg.body, { headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment', 'content-security-policy': "default-src 'none'; sandbox", 'x-page-type': pg.type.slice(0, 200), 'x-page-url': pg.url.slice(0, 2048), 'cache-control': 'no-store' } });
+      }
       const text = await req.text();
       if (text.length > 64 * 1024) throw bad('大きすぎます', 413);
       let body; try { body = JSON.parse(text); } catch (e) { throw bad('JSON が不正です'); }
