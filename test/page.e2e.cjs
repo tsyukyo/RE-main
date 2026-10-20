@@ -7,7 +7,7 @@ const iconv = s => new TextEncoder().encode(s); // UTF-8 のページ
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
   const p = await ctx.newPage(); const errs = [], asked = []; p.on('pageerror', e => errs.push(e.message));
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>チケット | 冬のアコースティックライブ 2026</title>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>冬のアコースティックライブ 2026 | チケット販売サイト</title>
     <meta property="og:title" content="冬のアコースティックライブ 2026">
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"冬のアコースティックライブ 2026","startDate":"2026-12-13T17:00:00+09:00"}</script>
     <script>document.title='x'</script><style>p{color:red}</style></head>
@@ -34,9 +34,11 @@ const iconv = s => new TextEncoder().encode(s); // UTF-8 のページ
   assert.deepEqual(asked, ['https://ticket.example.jp/e/1']);
   assert.ok(text.startsWith('https://ticket.example.jp/e/1\n'));
   assert.ok(!/document\.title|color:red|メニュー/.test(text));
-  assert.ok(got.some(g => /^冬のアコースティックライブ2026.*12\/13.*17:00/.test(g)), 'JSON-LD の公演日');
-  assert.ok(got.some(g => /一般発売.*11\/1.*10:00/.test(g)));
-  assert.ok(got.some(g => /お支払い.*11\/4.*23:59/.test(g)));
+  // タイトルはどれもページのタイトル（末尾のサイト名は外す）
+  assert.ok(got.every(g => g.startsWith('冬のアコースティックライブ 2026 | ')), 'ページのタイトル');
+  assert.ok(got.some(g => /12\/13.*17:00/.test(g)), 'JSON-LD の公演日');
+  assert.ok(got.some(g => /11\/1.*10:00/.test(g)));
+  assert.ok(got.some(g => /11\/4.*23:59/.test(g)));
   await p.screenshot({ path: OUT + '/page.png' });
   // 失敗したときはメッセージを出す
   await p.unroute('**/api/page');

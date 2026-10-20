@@ -1460,6 +1460,8 @@ function scanText() {
   if (!text.trim()) SC.hint = '';
   // 抽選発表 → 応募締切・購入期限 → その他 の順に並べる（同じ種類の中は日付順）。過ぎたものは最後
   SC.cands = findDates(text, new Date(), { title: SC.hint }).sort((a, b) => a.past - b.past || a.prio - b.prio || a.due - b.due); SC.titles = {};
+  // URL のページから読んだときは、どの候補もページのタイトルをそのまま使う（何の期日かはメモに残す）
+  if (SC.pageTitle && SC.pageUrl === SC.url) SC.cands.forEach(c => { c.what = c.title; c.title = SC.pageTitle; });
   const up = SC.cands.filter(c => !c.past).length;
   // 抽選発表・締切・購入期限は最初から選んでおく。ほかは候補が少ないときだけ選ぶ
   SC.sel = new Set(SC.cands.map((c, i) => [c, i]).filter(([c]) => { const k = fmtLocal(c.due) + c.title; return keep.has(k) ? keep.get(k) : !c.past && (c.prio <= 1 || up <= 3); }).map(([, i]) => i));
@@ -1482,7 +1484,7 @@ async function readPage() {
     // URL は先頭に残し（通知で開く先になる）、ページの中身はその下に置く。読み直したときは前の中身を置き換える
     const own = ta.value.split('\n—— ページの内容 ——\n')[0].trim();
     ta.value = (own || target) + '\n—— ページの内容 ——\n' + pg.text;
-    SC.hint = pg.title; SC.pageUrl = target;
+    SC.hint = pg.title; SC.pageTitle = pg.title; SC.pageUrl = target;
     SC.pageMsg = pg.text ? '' : 'ページに文章が見つかりませんでした（ログインが必要なページや、表示に JavaScript が要るページは読めません）。';
     SC.loading = false; scanText();
     if (pg.text && !SC.cands.length) { SC.pageMsg = 'ページは読めましたが、期日が見つかりませんでした。必要な部分をコピーして貼り付けると探せることがあります。'; drawScan(); }
@@ -1501,7 +1503,10 @@ function pageToText(html) {
   // DOMParser はスクリプトを実行しないので、取り寄せたページを安全に読める
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const meta = n => (doc.querySelector(`meta[property="${n}"],meta[name="${n}"]`)?.getAttribute('content') || '').trim();
-  const title = (meta('og:title') || doc.title || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  // ページのタイトル（ブラウザのタブに出るもの）。末尾の「| サイト名」は外す
+  const sp = s => s.replace(/\s+/g, ' ').trim();
+  const parts = sp(doc.title || '').split(/\s+[|｜\-–—]\s+|\s*｜\s*/).filter(Boolean);
+  const title = ((parts.length > 1 ? parts.slice(0, -1).join(' | ') : parts[0]) || sp(meta('og:title'))).slice(0, 80);
   // 構造化データ（JSON-LD）のイベント日時。本文に日付が書かれていないページでも拾える
   const ev = [], seen = new Set();
   // 書かれている現地の日時をそのまま使う（タイムゾーンで時刻がずれないように）
@@ -1550,7 +1555,8 @@ function scanRegister() {
   const listId = view.list || 'inbox', now = new Date();
   const rs = [...SC.sel].sort((a, b) => a - b).map(i => {
     const c = SC.cands[i], title = (SC.titles[i] ?? c.title).trim() || 'リマインダー';
-    return { id: uid(), title, notes: c.src, url: SC.url, list: listId, due: fmtLocal(c.due), rule: null, nag: null,
+    const notes = c.what && c.what !== title ? `${c.tag || c.what}: ${c.src}` : c.tag ? `${c.tag}: ${c.src}` : c.src;
+    return { id: uid(), title, notes, url: SC.url, list: listId, due: fmtLocal(c.due), rule: null, nag: null,
       flagged: view.smart === 'flagged', priority: 0, done: false, doneAt: null, count: 0, history: [], input: c.src, createdAt: fmtLocal(now) };
   });
   SC = null;
