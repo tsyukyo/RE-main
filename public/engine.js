@@ -561,4 +561,64 @@ function parseGroup(raw, now = new Date()) {
   return { due: head.due, items, every, url: head.url };
 }
 
-if (typeof module !== 'undefined') module.exports = { parseGroup, groupTimes, parseInput, describeRule, nextAfter, nextOnComplete, upcoming, fmtDue, holidayName, holidays, fmtLocal, parseLocal, ymd, firstOccurrence, dayMatches, condMatch, describeCond };
+// ===== 文章（貼り付けた文や写真から読み取った文字）から、期日の候補を探す =====
+// 「11月8日(日) 9:00」「2026/11/1 10:00」「11/4(水)23:59まで」「令和8年12月13日」などの、はっきりした日付だけを拾う。
+// 「明日」「3日後」のような相対表現は拾わない（チラシやページの文面では誤検出になりやすいため）
+function findDates(raw, now = new Date()) {
+  let text = String(raw || '').normalize('NFKC').replace(/\r/g, '');
+  // 写真の文字読み取りは字の間に空白が入りやすいので詰める
+  const J = /[\d年月日時分:\/()曜〜~\-぀-ヿ一-鿿]/;
+  text = text.replace(/(?<!\d)(\d)[ \t]+(?=\d(?!\d))/g, '$1') // 「1 1 月」→「11月」（1桁ずつ離れた数字だけ）
+    .replace(/(\S)[ \t]+(?=(\S))/g, (m, a, b) => J.test(a) && J.test(b) && !(/\d/.test(a) && /\d/.test(b)) ? a : m);
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const DATE = /(?:(\d{4})年|令和(\d{1,2}|元)年)?(\d{1,2})月(\d{1,2})日|(?<![\d\-.\/])(20\d{2})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?![\d.])|(?<![\d\/.])(\d{1,2})\/(\d{1,2})(?![\d\/])/g;
+  const TIME = /(午前|午後|AM|PM)?(\d{1,2})(?::(\d{2})|時(?:(\d{1,2})分|半)?)/gi;
+  const hasDate = l => { DATE.lastIndex = 0; const r = DATE.test(l); DATE.lastIndex = 0; return r; };
+  const docTitle = (lines.find(l => !hasDate(l) && l.replace(/[\s\p{P}\p{S}]/gu, '').length >= 2 && l.length <= 30) || '').replace(/^[\s・■□●○◆◇【\[]+|[\s】\]]+$/g, '');
+  const today = dayStart(now), out = [], seen = new Set();
+  for (const line of lines) {
+    const ms = [...line.matchAll(DATE)];
+    ms.forEach((m, mi) => {
+      let y = m[1] ? +m[1] : m[2] ? 2018 + (m[2] === '元' ? 1 : +m[2]) : m[5] ? +m[5] : null;
+      const mo = +(m[3] || m[6] || m[8]), d = +(m[4] || m[7] || m[9]);
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return;
+      const yearless = y == null;
+      if (yearless) { y = now.getFullYear(); if (new Date(y, mo - 1, d) < addDays(today, -1)) y++; }
+      const day = new Date(y, mo - 1, d);
+      if (day.getMonth() !== mo - 1) return;
+      // この日付の後ろ（次の日付まで）にある時刻
+      const end = mi + 1 < ms.length ? ms[mi + 1].index : line.length;
+      const tail = line.slice(m.index + m[0].length, end).replace(/[(（][日月火水木金土](曜日?)?[)）]/g, ' ');
+      const times = []; let lastEnd = 0;
+      for (const t of tail.matchAll(TIME)) {
+        let h = +t[2]; const mm = t[3] ? +t[3] : t[4] ? +t[4] : /半/.test(t[0]) ? 30 : 0;
+        if (/午後|PM/i.test(t[1] || '') && h < 12) h += 12;
+        if (h > 24 || mm > 59 || (!t[3] && !/時/.test(t[0]))) continue;
+        // 「9:00〜11:00」の終わりの時刻は拾わない（写真の読み取りで「〜」が消えて「9:0011:00」になる場合も）
+        const gap = tail.slice(lastEnd, t.index);
+        lastEnd = t.index + t[0].length;
+        if (times.length && /^[\s〜~\-–]{0,2}$/.test(gap)) continue;
+        const before = tail.slice(0, t.index).replace(/[\s:：\/／、,・()〜~\-]+$/g, '').match(/([぀-ヿ一-鿿]{1,4})$/);
+        times.push({ h: h % 24, mm, word: before ? before[1] : '' });
+        if (times.length >= 3) break;
+      }
+      const deadline = /締切|締め切り|〆切|期限|まで|迄/.test(line);
+      let label = line.replace(DATE, ' ').replace(TIME, ' ').replace(/[(（][日月火水木金土](曜日?)?[)）]/g, ' ')
+        .replace(/[〜~\-–—:：\/／、,。・|｜()（）【】\[\]]+/g, ' ').replace(/\s+/g, ' ').trim()
+        .replace(/^(日時|日程|日付|開催日|開催日時|期間|時間|とき|日)\s*/, '').replace(/\s*(から|より|まで|迄|頃|ごろ)$/, '').replace(/(は|が|を|に)$/, '').trim();
+      times.forEach(t => { if (t.word) label = label.replace(t.word, ' '); });
+      label = label.replace(/\s+/g, ' ').trim();
+      if (label.length > 24) label = label.slice(0, 24);
+      const base = !label ? docTitle : docTitle && label.length <= 8 && !label.includes(docTitle) && !docTitle.includes(label) ? `${docTitle}（${label}）` : label;
+      (times.length ? times : [null]).forEach(t => {
+        const due = new Date(y, mo - 1, d, t ? t.h : 9, t ? t.mm : 0);
+        const title = (t && t.word && times.length > 1 ? `${base || 'リマインダー'} ${t.word}` : base) || 'リマインダー';
+        const k = fmtLocal(due) + title;
+        if (seen.has(k)) return; seen.add(k);
+        out.push({ due, title, src: line.length > 60 ? line.slice(0, 59) + '…' : line, hasTime: !!t, deadline, past: due < now });
+      });
+    });
+  }
+  return out.sort((a, b) => a.due - b.due).slice(0, 20);
+}
+if (typeof module !== 'undefined') module.exports = { findDates, parseGroup, groupTimes, parseInput, describeRule, nextAfter, nextOnComplete, upcoming, fmtDue, holidayName, holidays, fmtLocal, parseLocal, ymd, firstOccurrence, dayMatches, condMatch, describeCond };
