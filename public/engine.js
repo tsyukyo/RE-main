@@ -642,7 +642,10 @@ function findDates(raw, now = new Date(), opt = {}) {
       // 日付だけの行は、すぐ上の見出し行（「■説明会」など）を名前にする
       let head = '';
       if (!label && li > 0 && !hasDate(lines[li - 1]) && !/\d{1,2}(:\d{2}|時)/.test(lines[li - 1])) { const h = cleanTitle(lines[li - 1]); if (wordy(h) && h.length <= 24 && h !== docTitle) head = h; }
+      // 「開催日時」「日程」だけの見出しは名前にしない（文書の見出しを使う）
+      if (/^(開催|公演|イベント)?(日時|日程|日付|開催日|公演日|日)$/.test(head)) head = '';
       if (head && !label && DATE_KINDS.some(x => x.re.test(head))) { label = head.replace(/(の)?(ご)?(連絡|案内|お知らせ)$/, ''); head = ''; }
+      label = label.replace(/(発表|開始|終了|締切)予定$/, '$1');
       if (role && label) label = /期間$/.test(label) ? label.replace(/期間$/, role === 'start' ? '開始' : '終了') : label + (role === 'start' ? '開始' : '終了');
       if (label.length > 24) label = label.slice(0, 24);
       // 期日の種類（抽選発表・購入期限・応募締切・応募開始）。見出し行の言葉も手がかりにする
@@ -652,6 +655,8 @@ function findDates(raw, now = new Date(), opt = {}) {
       if (!kd && role) kd = DATE_KINDS.find(x => x.kind === (role === 'start' ? 'open' : 'close'));
       if (!kd) kd = DATE_KINDS.find(x => x.re.test(ctx));
       if (kd && kd.kind === 'buy' && role === 'start') kd = { ...kd, tag: '購入開始', prio: 2 };
+      // 抽選ではない先着の販売期間は「販売開始・販売終了」とし、締切より後ろに並べる
+      if (kd && (kd.kind === 'open' || kd.kind === 'close') && /販売|発売/.test(ctx) && !/抽選|応募|エントリー|申込/.test(ctx)) kd = { ...kd, tag: kd.kind === 'open' ? '販売開始' : '販売終了', prio: 2 };
       const base = head || (!label ? docTitle : docTitle && label.length <= 8 && !label.includes(docTitle) && !docTitle.includes(label) ? `${docTitle}の${label}` : label);
       (times.length ? times : [null]).forEach(t => {
         const due = new Date(y, mo - 1, d, t ? t.h : 9, t ? t.mm : 0);
