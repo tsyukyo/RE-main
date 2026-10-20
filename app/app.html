@@ -1360,17 +1360,29 @@ async function getOcr(onProgress) {
   });
   return ocrWorker;
 }
-// 大きな写真は長辺 2000px に縮めてから読む（速さとメモリのため）
+// 大きな写真は長辺 2000px に縮め、小さな画像（スクリーンショットの一部など）は 1600px に広げてから読む
 async function shrinkImage(file) {
   const bmp = await createImageBitmap(file);
-  const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const long = Math.max(bmp.width, bmp.height);
+  const k = long < 1200 ? 1600 / long : Math.min(1, 2000 / long);
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); bmp.close && bmp.close();
   return c;
 }
+// 日本語の読み取り結果は字の間に空白が入るので詰める
+const tidyOcr = t => t.replace(/(?<=[\u3000-\u30ff\u4e00-\u9fff（）()])[ \t]+(?=[\u3000-\u30ff\u4e00-\u9fff（）()\d])|(?<=[\d])[ \t]+(?=[年月日時分])/g, '');
+// 写真の見出し: 日付を含まない行のうち、ほかの行よりはっきり大きい文字の行（チラシのタイトルなど）
+function photoHeading(data) {
+  const lines = (data.blocks || []).flatMap(b => (b.paragraphs || []).flatMap(p => p.lines || []))
+    .map(l => ({ text: tidyOcr(l.text || '').trim(), h: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0, conf: l.confidence || 0 })).filter(l => l.text && l.h > 0);
+  if (lines.length < 2) return '';
+  const hs = lines.map(l => l.h).sort((a, b) => a - b), median = hs[Math.floor(hs.length / 2)];
+  const big = lines.filter(l => l.conf >= 50 && /[\u3040-\u30ff\u4e00-\u9fff]{2,}/.test(l.text) && !findDates(l.text).length).sort((a, b) => b.h - a.h)[0];
+  return big && big.h >= median * 1.3 ? big.text.slice(0, 30) : '';
+}
 let SC = null;
 function openScan() {
-  SC = { cands: [], sel: new Set(), titles: {}, url: null };
+  SC = { cands: [], sel: new Set(), titles: {}, url: null, photoTitle: '' };
   const ICAM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
   const IPASTE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h4"/></svg>';
   openSheet(`<div class="sheet-h gut"><button class="navbtn" data-act="cancel">キャンセル</button><div class="t">写真・文章から追加</div><span></span></div>
@@ -1412,11 +1424,11 @@ async function scanPhoto(f) {
       else if (/loading|initializ/.test(m.status)) set(ocrWorker ? '準備しています…' : '初回だけ読み取りの準備をしています…', 0.05 + 0.25 * (m.progress || 0));
     });
     if (!SC) return;
-    const { data } = await w.recognize(img);
+    const { data } = await w.recognize(img, {}, { text: true, blocks: true });
+    SC.photoTitle = photoHeading(data);
     if (!SC) return;
     const ta = $('#scText');
-    // 日本語の読み取り結果は字の間に空白が入るので詰めてから欄に入れる
-    const got = (data.text || '').replace(/(?<=[\u3000-\u30ff\u4e00-\u9fff（）()])[ \t]+(?=[\u3000-\u30ff\u4e00-\u9fff（）()\d])|(?<=[\d])[ \t]+(?=[年月日時分])/g, '').replace(/\n{2,}/g, '\n').trim();
+    const got = tidyOcr(data.text || '').replace(/\n{2,}/g, '\n').trim();
     ta.value = got + (ta.value.trim() ? '\n' + ta.value.trim() : '');
     set(data.text && data.text.trim() ? '読み取りました。違う文字は下の欄で直せます' : '文字が見つかりませんでした', 1);
     scanText();
@@ -1428,7 +1440,8 @@ function scanText() {
   if (!SC) return;
   const text = $('#scText').value;
   const keep = new Map(SC.cands.map((c, i) => [fmtLocal(c.due) + c.title, SC.sel.has(i)]));
-  SC.cands = findDates(text, new Date()); SC.titles = {};
+  if (!text.trim()) SC.photoTitle = '';
+  SC.cands = findDates(text, new Date(), { title: SC.photoTitle }); SC.titles = {};
   const up = SC.cands.filter(c => !c.past).length;
   SC.sel = new Set(SC.cands.map((c, i) => [c, i]).filter(([c]) => { const k = fmtLocal(c.due) + c.title; return keep.has(k) ? keep.get(k) : !c.past && up <= 3; }).map(([, i]) => i));
   const m = text.match(/https?:\/\/[^\s<>"'）)]+/); SC.url = m ? normUrl(m[0]) : null;

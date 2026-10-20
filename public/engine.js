@@ -564,7 +564,19 @@ function parseGroup(raw, now = new Date()) {
 // ===== 文章（貼り付けた文や写真から読み取った文字）から、期日の候補を探す =====
 // 「11月8日(日) 9:00」「2026/11/1 10:00」「11/4(水)23:59まで」「令和8年12月13日」などの、はっきりした日付だけを拾う。
 // 「明日」「3日後」のような相対表現は拾わない（チラシやページの文面では誤検出になりやすいため）
-function findDates(raw, now = new Date()) {
+// タイトルにしない飾りや決まり文句を落とす（「【重要】保護者会のお知らせ」→「保護者会」）
+function cleanTitle(s) {
+  return String(s || '').replace(/[【\[(（<＜《「『][^】\]）)>＞》」』]{0,8}[】\]）)>＞》」』]/g, ' ')
+    .replace(/[■□●○◆◇▲△▼▽★☆※♪→⇒▶►・*＊#＃|｜_]+/g, ' ')
+    .replace(/^(Re|RE|Fw|FW|Fwd):\s*/, '')
+    .replace(/(についての|に関する)?(お知らせ|ご案内|ご連絡|のご確認|ご注文の確認|ご予約の確認|確認メール)$/, '')
+    .replace(/(ご予約|ご注文|ご購入|ご登録|お申し込み|お申込み)?(いただき)?(誠に)?ありがとう(ござい)?(ます|ました)。?/g, ' ')
+    .replace(/(の|は|が|を|に|と|で)$/, '')
+    .replace(/\s+/g, ' ').trim()
+    .replace(/(?<=[\u3040-\u30ff\u4e00-\u9fff]) (?=[\u3040-\u30ff\u4e00-\u9fff])/g, '');
+}
+const wordy = s => (s.match(/[\p{L}]/gu) || []).length >= 2 && (s.match(/\d/g) || []).length <= s.length / 2;
+function findDates(raw, now = new Date(), opt = {}) {
   let text = String(raw || '').normalize('NFKC').replace(/\r/g, '');
   // 写真の文字読み取りは字の間に空白が入りやすいので詰める
   const J = /[\d年月日時分:\/()曜〜~\-぀-ヿ一-鿿]/;
@@ -574,9 +586,13 @@ function findDates(raw, now = new Date()) {
   const DATE = /(?:(\d{4})年|令和(\d{1,2}|元)年)?(\d{1,2})月(\d{1,2})日|(?<![\d\-.\/])(20\d{2})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?![\d.])|(?<![\d\/.])(\d{1,2})\/(\d{1,2})(?![\d\/])/g;
   const TIME = /(午前|午後|AM|PM)?(\d{1,2})(?::(\d{2})|時(?:(\d{1,2})分|半)?)/gi;
   const hasDate = l => { DATE.lastIndex = 0; const r = DATE.test(l); DATE.lastIndex = 0; return r; };
-  const docTitle = (lines.find(l => !hasDate(l) && l.replace(/[\s\p{P}\p{S}]/gu, '').length >= 2 && l.length <= 30) || '').replace(/^[\s・■□●○◆◇【\[]+|[\s】\]]+$/g, '');
+  // 文書の見出し: 写真なら一番大きい文字の行（opt.title）、なければ日付のない最初の行
+  // 番号・連絡先の行は見出しにしない。見出しは最初の日付より上にあるものだけ
+  const firstDate = lines.findIndex(hasDate);
+  const docTitle = cleanTitle(opt.title) || lines.slice(0, firstDate < 0 ? lines.length : firstDate)
+    .filter(l => l.length <= 40 && !/番号|No\.|ID|TEL|Tel|電話|〒|住所|https?:|@/.test(l)).map(cleanTitle).find(l => wordy(l) && l.length <= 30) || '';
   const today = dayStart(now), out = [], seen = new Set();
-  for (const line of lines) {
+  for (const [li, line] of lines.entries()) {
     const ms = [...line.matchAll(DATE)];
     ms.forEach((m, mi) => {
       let y = m[1] ? +m[1] : m[2] ? 2018 + (m[2] === '元' ? 1 : +m[2]) : m[5] ? +m[5] : null;
@@ -597,7 +613,7 @@ function findDates(raw, now = new Date()) {
         // 「9:00〜11:00」の終わりの時刻は拾わない（写真の読み取りで「〜」が消えて「9:0011:00」になる場合も）
         const gap = tail.slice(lastEnd, t.index);
         lastEnd = t.index + t[0].length;
-        if (times.length && /^[\s〜~\-–]{0,2}$/.test(gap)) continue;
+        if (times.length && /^[\s〜~\-–ー－へ]{0,2}$/.test(gap)) continue;
         const before = tail.slice(0, t.index).replace(/[\s:：\/／、,・()〜~\-]+$/g, '').match(/([぀-ヿ一-鿿]{1,4})$/);
         times.push({ h: h % 24, mm, word: before ? before[1] : '' });
         if (times.length >= 3) break;
@@ -605,11 +621,16 @@ function findDates(raw, now = new Date()) {
       const deadline = /締切|締め切り|〆切|期限|まで|迄/.test(line);
       let label = line.replace(DATE, ' ').replace(TIME, ' ').replace(/[(（][日月火水木金土](曜日?)?[)）]/g, ' ')
         .replace(/[〜~\-–—:：\/／、,。・|｜()（）【】\[\]]+/g, ' ').replace(/\s+/g, ' ').trim()
-        .replace(/^(日時|日程|日付|開催日|開催日時|期間|時間|とき|日)\s*/, '').replace(/\s*(から|より|まで|迄|頃|ごろ)$/, '').replace(/(は|が|を|に)$/, '').trim();
+        // 文の形なら言い切りの部分を落とす（「出欠票は11月7日までに担任へ提出してください」→「出欠票は担任へ提出」）
+        .replace(/(を|して|し)?(ください|下さい|お願いします|お願いいたします|お願い致します)。?$/, '').replace(/\s*(までに|までは|まで|迄に|迄)\s*/g, ' ');
       times.forEach(t => { if (t.word) label = label.replace(t.word, ' '); });
-      label = label.replace(/\s+/g, ' ').trim();
+      label = cleanTitle(label).replace(/^(日時|日程|日付|開催日時|開催日|期間|時間|とき|日|時)\s*/, '').replace(/(日時|日程)$/, '').replace(/\s*(から|より|頃|ごろ)$/, '').replace(/(は|が|を|に)$/, '').trim();
+      if (!wordy(label)) label = '';
+      // 日付だけの行は、すぐ上の見出し行（「■説明会」など）を名前にする
+      let head = '';
+      if (!label && li > 0 && !hasDate(lines[li - 1]) && !/\d{1,2}(:\d{2}|時)/.test(lines[li - 1])) { const h = cleanTitle(lines[li - 1]); if (wordy(h) && h.length <= 24 && h !== docTitle) head = h; }
       if (label.length > 24) label = label.slice(0, 24);
-      const base = !label ? docTitle : docTitle && label.length <= 8 && !label.includes(docTitle) && !docTitle.includes(label) ? `${docTitle}（${label}）` : label;
+      const base = head || (!label ? docTitle : docTitle && label.length <= 8 && !label.includes(docTitle) && !docTitle.includes(label) ? `${docTitle}の${label}` : label);
       (times.length ? times : [null]).forEach(t => {
         const due = new Date(y, mo - 1, d, t ? t.h : 9, t ? t.mm : 0);
         const title = (t && t.word && times.length > 1 ? `${base || 'リマインダー'} ${t.word}` : base) || 'リマインダー';
