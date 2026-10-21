@@ -20,8 +20,8 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8787', OUT = process.env.OUT 
   
   const pv = await p.textContent('#preview'); console.log('preview:', pv.replace(/\s+/g,' '));
   assert.match(pv, /毎週/);
-  // 再度選び直すと置き換わる
-  await p.tap('#calBtn'); await p.waitForTimeout(400); await p.tap('.cal-q [data-q="0"]'); await p.tap('.cal-t [data-t="21:30"]'); await p.tap('#calWrap [data-c="ok"]'); await p.waitForTimeout(400);
+  // 再度選び直すと置き換わる（今日の時刻は夜に走らせると過ぎていることがあるので明日にする）
+  await p.tap('#calBtn'); await p.waitForTimeout(400); await p.tap('.cal-q [data-q="1"]'); await p.tap('.cal-t [data-t="21:30"]'); await p.tap('#calWrap [data-c="ok"]'); await p.waitForTimeout(400);
   console.log('quick2:', await p.inputValue('#quick'));
   await p.fill('#quick', '');
   // ウィザード: カレンダーで選ぶ
