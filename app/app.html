@@ -555,7 +555,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const $ = s => document.querySelector(s);
 function normUrl(u) {
-  u = String(u || '').trim(); if (!u) return null;
+  u = String(u || '').trim().replace(/&amp;/gi, '&'); if (!u) return null;
   if (/^www\./i.test(u)) u = 'https://' + u;
   if (!/^[a-z]+:\/\//i.test(u) && /^[\w-]+(\.[\w-]+)+(\/|$)/.test(u)) u = 'https://' + u;
   try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : null; } catch (e) { return null; }
@@ -1469,7 +1469,7 @@ async function readPage() {
   const target = SC.url; SC.loading = true; SC.pageMsg = ''; drawScan();
   try {
     const r = await fetch('/api/page', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: target }) });
-    if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (e) {} throw new Error(m || 'ページを開けませんでした'); }
+    if (!r.ok) { let j = {}; try { j = await r.json(); } catch (e) {} throw Object.assign(new Error(j.error || 'ページを開けませんでした'), { fallback: true }); }
     const html = decodePage(new Uint8Array(await r.arrayBuffer()), r.headers.get('x-page-type') || '');
     const pg = pageToText(html);
     if (!SC) return;
@@ -1483,7 +1483,9 @@ async function readPage() {
     if (pg.text && !SC.cands.length) { SC.pageMsg = 'ページは読めましたが、期日が見つかりませんでした。必要な部分をコピーして貼り付けると探せることがあります。'; drawScan(); }
   } catch (e) {
     if (!SC) return;
-    SC.loading = false; SC.pageMsg = e.message === 'Failed to fetch' || e.name === 'TypeError' ? '通信できませんでした。電波のよい場所でもう一度試してください。' : e.message; drawScan();
+    SC.loading = false;
+    SC.pageMsg = e.fallback ? `${e.message}。ページを開いて、日付が書かれた部分をコピーし、この欄に貼り付けると探せます。` : '通信できませんでした。電波のよい場所でもう一度試してください。';
+    SC.pageFail = e.fallback ? target : ''; drawScan();
   }
 }
 function decodePage(bytes, type) {
@@ -1531,7 +1533,7 @@ function drawScan() {
   const text = $('#scText').value.trim();
   // URL があれば、設定でオンにしている人にはページを読むボタンを出す
   const pg = !SC.url || !IS_PWA ? '' : pageMode()
-    ? `<button type="button" class="sc-pg" id="scPage" ${SC.loading ? 'disabled' : ''}>${SC.loading ? 'ページを読んでいます…' : SC.pageUrl === SC.url ? 'このページをもう一度読む' : `${esc(hostOf(SC.url))} のページを読む`}</button>${SC.pageMsg ? `<div class="fgroup-f">${esc(SC.pageMsg)}</div>` : ''}`
+    ? `<button type="button" class="sc-pg" id="scPage" ${SC.loading ? 'disabled' : ''}>${SC.loading ? 'ページを読んでいます…' : SC.pageUrl === SC.url ? 'このページをもう一度読む' : `${esc(hostOf(SC.url))} のページを読む`}</button>${SC.pageMsg ? `<div class="fgroup-f">${esc(SC.pageMsg)}${SC.pageFail === SC.url ? ` <a href="${esc(SC.url)}" target="_blank" rel="noopener">ページを開く</a>` : ''}</div>` : ''}`
     : '<div class="fgroup-f">設定の「URL のページを読む」をオンにすると、このURLのページから期日を探せます。</div>';
   if (!SC.cands.length) { out.innerHTML = (text ? '<div class="fgroup-f">日付が見つかりませんでした。「11月8日 9:00」のような書き方の日付を探します。</div>' : '') + pg; return; }
   const n = SC.sel.size;

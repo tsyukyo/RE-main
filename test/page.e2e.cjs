@@ -43,9 +43,13 @@ const iconv = s => new TextEncoder().encode(s); // UTF-8 のページ
   await p.screenshot({ path: OUT + '/page.png' });
   // 失敗したときはメッセージを出す
   await p.unroute('**/api/page');
-  await p.route('**/api/page', r => r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'ページを開けませんでした（404）' }) }));
+  await p.route('**/api/page', r => r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'このサイトは、サーバーからの読み込みを断っています（403）', blocked: true }) }));
   await p.evaluate(() => document.getElementById('scPage').click()); await p.waitForTimeout(500);
-  assert.match(await p.textContent('#scOut'), /ページを開けませんでした（404）/);
+  assert.match(await p.textContent('#scOut'), /断っています（403）。ページを開いて.*貼り付ける/);
+  assert.equal(await p.getAttribute('#scOut a[target="_blank"]', 'href'), 'https://ticket.example.jp/e/1');
+  // SNS からコピーした URL の &amp; は & に直す
+  await p.fill('#scText', 'https://shop.example.jp/detail.php?id=1&amp;utm_source=x'); await p.waitForTimeout(500);
+  assert.equal(await p.evaluate(() => SC.url), 'https://shop.example.jp/detail.php?id=1&utm_source=x');
   console.log('errors:', errs); assert.deepEqual(errs, []);
   await b.close(); console.log('ok: page');
 })();

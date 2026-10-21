@@ -25,6 +25,13 @@ function checkTimes(times) {
 }
 // ---- ページの取得（設定でオンにした人だけが使う。ページは保存せず、そのまま端末へ返す） ----
 const PAGE_MAX = 1536 * 1024, PAGE_TIMEOUT = 8000;
+// iPhone の Safari と同じ見え方で頼む（ボット向けの別ページや拒否を避けるため）
+const PAGE_HEADERS = {
+  'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'accept-language': 'ja-JP,ja;q=0.9',
+  'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'upgrade-insecure-requests': '1',
+};
 function checkPageUrl(raw, self) {
   let u; try { u = new URL(raw); } catch (e) { throw bad('URL が正しくありません'); }
   if (!/^https?:$/.test(u.protocol) || u.username || u.password) throw bad('http/https のページだけ読めます');
@@ -39,11 +46,12 @@ async function fetchPage(raw, self) {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), PAGE_TIMEOUT);
   try {
     for (let hop = 0; ; hop++) {
-      res = await fetch(u, { redirect: 'manual', signal: ctl.signal, headers: { 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1 RE-main', accept: 'text/html,application/xhtml+xml', 'accept-language': 'ja,en;q=0.5' } });
+      res = await fetch(u, { redirect: 'manual', signal: ctl.signal, headers: PAGE_HEADERS });
       if (res.status < 300 || res.status >= 400 || !res.headers.get('location')) break;
       if (hop >= 4) throw bad('転送が多すぎます', 502);
       u = checkPageUrl(new URL(res.headers.get('location'), u).href, self);
     }
+    if ([401, 403, 429, 503].includes(res.status)) throw Object.assign(bad(`このサイトは、サーバーからの読み込みを断っています（${res.status}）`, 502), { blocked: true });
     if (!res.ok) throw bad(`ページを開けませんでした（${res.status}）`, 502);
     const type = res.headers.get('content-type') || '';
     if (!/text\/html|application\/xhtml|text\/plain/i.test(type)) throw bad('Web ページではありません', 415);
@@ -90,7 +98,7 @@ export default {
       if (url.pathname === '/api/clear') return json(await stub.clear());
       throw bad('not found', 404);
     } catch (e) {
-      return json({ error: e.message }, e.status || 500);
+      return json({ error: e.message, blocked: !!e.blocked }, e.status || 500);
     }
   },
 };
