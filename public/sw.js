@@ -2,6 +2,7 @@
 // プッシュには「時刻」しか入っていない。通知の文面は端末内のデータ（IndexedDB）から作る
 importScripts('engine.js', 'core.js');
 const CACHE = 'rimain-v1';
+// 電波がなくても開けるよう、最初に保存しておくファイル
 const ASSETS = ['./', 'index.html', 'engine.js', 'core.js', 'pwa.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -20,6 +21,7 @@ self.addEventListener('fetch', e => {
   }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
 });
 
+// プッシュを受けたとき: data.at（鳴らす時刻）の前後で、まだ出していない回の通知を出す
 async function showDue(data) {
   if (data.test) {
     return self.registration.showNotification('RE:main（テスト）', { body: '閉じている間の通知が届きました。タップするとアプリが開きます。', tag: 'rimain-test', icon: 'icon-192.png', data: { test: true } });

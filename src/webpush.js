@@ -2,6 +2,7 @@
 const te = new TextEncoder();
 const subtle = crypto.subtle;
 
+// base64url（パディングなし）との変換
 export const b64u = buf => {
   const a = new Uint8Array(buf); let s = '';
   for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
@@ -36,6 +37,7 @@ export async function vapidAuth(endpoint, keys, subject) {
   return `vapid t=${head}.${body}.${b64u(sig)}, k=${keys.publicKey}`;
 }
 
+// HKDF-SHA256 で len バイトの鍵を導出する
 async function hkdf(salt, ikm, info, len) {
   const k = await subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
   return new Uint8Array(await subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, k, len * 8));
