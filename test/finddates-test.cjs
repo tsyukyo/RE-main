@@ -69,3 +69,17 @@ assert.deepEqual(kinds('ONE-MAN LIVE「HELLO」\n開催日時\n2026年11月28日
   '2026-11-28T18:00 ONE-MAN LIVE「HELLO」 開演 []',
 ]);
 console.log('ok: findDates (lottery)');
+// いろいろな書き方
+const one = t => findDates(t, now).map(c => `${fmtLocal(c.due)} [${c.tag}]`);
+assert.deepEqual(one('Lottery results: Oct 30, 2026 at 3:00 PM'), ['2026-10-30T15:00 [抽選発表]']);
+assert.deepEqual(one('Entry closes Friday, November 6th 11:59pm'), ['2026-11-06T23:59 [応募締切]']);
+assert.deepEqual(one('Draw 30 Oct 2026 18:00'), ['2026-10-30T18:00 [抽選発表]']);
+assert.deepEqual(one('当選発表 10.30(金) 18時頃'), ['2026-10-30T18:00 [抽選発表]']);
+assert.deepEqual(one('受付 10月30日(金)〜31日(土)'), ['2026-10-30T09:00 [応募開始]', '2026-10-31T09:00 [応募締切]']);
+assert.deepEqual(one('発表 2026年11/2 正午'), ['2026-11-02T12:00 [抽選発表]']);
+assert.deepEqual(one('当選発表 2026.11.05 午後6時半'), ['2026-11-05T18:30 [抽選発表]']);
+assert.deepEqual(one('発表 2026-11-05T18:00:00+09:00'), ['2026-11-05T18:00 [抽選発表]']);
+assert.deepEqual(one('支払期限 １１／７（土）２３：５９'), ['2026-11-07T23:59 [購入期限]']);
+assert.deepEqual(one('抽選結果 令和8年11月10日 夜8時'), ['2026-11-10T20:00 [抽選発表]']);
+assert.deepEqual(one('当選発表 R8.11.12 20:00'), ['2026-11-12T20:00 [抽選発表]']);
+console.log('ok: findDates (formats)');

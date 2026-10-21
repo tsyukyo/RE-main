@@ -579,17 +579,45 @@ function cleanTitle(s) {
 const wordy = s => (s.match(/[\p{L}]/gu) || []).length >= 2 && (s.match(/\d/g) || []).length <= s.length / 2;
 // 抽選・予約サイトでよく出る期日の種類。prio が小さいほど大事（候補の並びと最初の選択に使う）
 const DATE_KINDS = [
-  { kind: 'result', tag: '抽選発表', prio: 0, re: /当選発表|当落発表|当選者発表|当選者の?発表|抽選結果|結果発表|結果の?(ご)?(連絡|通知|案内|お知らせ)|当選(の)?(ご)?(連絡|通知|メール|案内)|当落|発表/ },
-  { kind: 'buy', tag: '購入期限', prio: 1, re: /購入期限|購入手続|購入期間|お支払|支払(い)?期限|支払(い)?期間|決済|入金|払込|払い込み|引換|引き換え|引取|受け取り期限/ },
-  { kind: 'close', tag: '応募締切', prio: 1, re: /応募締切|応募期限|受付終了|受付締切|応募終了|エントリー(締切|終了|期限)|締切|締め切り|〆切|終了/ },
-  { kind: 'open', tag: '応募開始', prio: 2, re: /受付開始|応募開始|エントリー開始|抽選開始|販売開始|発売開始|一般発売|先行受付|受付期間|応募期間|エントリー期間|抽選期間|申込期間/ },
+  { kind: 'result', tag: '抽選発表', prio: 0, re: /当選発表|当落発表|当選者発表|当選者の?発表|抽選結果|結果発表|結果の?(ご)?(連絡|通知|案内|お知らせ)|当選(の)?(ご)?(連絡|通知|メール|案内)|当落|発表|\b(results?|winners?|draw(ing)?|announce(ment|d)?)\b/i },
+  { kind: 'buy', tag: '購入期限', prio: 1, re: /購入期限|購入手続|購入期間|お支払|支払(い)?期限|支払(い)?期間|決済|入金|払込|払い込み|引換|引き換え|引取|受け取り期限|\b(payment|purchase|pay by)\b/i },
+  { kind: 'close', tag: '応募締切', prio: 1, re: /応募締切|応募期限|受付終了|受付締切|応募終了|エントリー(締切|終了|期限)|締切|締め切り|〆切|終了|\b(deadline|closes?|ends?|until)\b/i },
+  { kind: 'open', tag: '応募開始', prio: 2, re: /受付開始|応募開始|エントリー開始|抽選開始|販売開始|発売開始|一般発売|先行受付|受付期間|応募期間|エントリー期間|抽選期間|申込期間|\b(opens?|starts?|entry period|sale begins)\b/i },
 ];
+// いろいろな日付・時刻の書き方を、findDates が読める形にそろえる
+const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+const MONRE = '(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\\.?';
+function normDateText(t) {
+  const md = (m, d, y) => `${y ? y + '年' : ''}${MON[m.toLowerCase().slice(0, 4) === 'sept' ? 'sept' : m.toLowerCase().slice(0, 3)]}月${+d}日`;
+  return t
+    // 英語の日付: Oct 30, 2026 / October 30 / 30 Oct 2026（曜日の Fri, なども外す）
+    .replace(/\b(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+(?=[a-z]|\d)/gi, '')
+    .replace(new RegExp(`\\b${MONRE}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?\\b`, 'gi'), (_, m, d, y) => md(m, d, y))
+    .replace(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONRE}(?:,?\\s+(20\\d{2}))?\\b`, 'gi'), (_, d, m, y) => md(m, d, y))
+    // 3:00 PM / 3pm / 3 p.m. → 午後3:00
+    .replace(/\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?(?![a-z])/gi, (_, h, mm, ap) => `${ap.toLowerCase() === 'p' ? '午後' : '午前'}${h}:${mm || '00'}`)
+    // 正午・お昼12時 → 12:00
+    .replace(/正午/g, ' 12:00 ')
+    // R8.11.5 のような令和の略記
+    .replace(/(?<![A-Za-z])R(\d{1,2})[.\/](\d{1,2})[.\/](\d{1,2})(?!\d)/g, '令和$1年$2月$3日')
+    // 夜8時・夕方6時 → 午後8時
+    .replace(/(夜|晩|夕方|夕)(\d{1,2})(?=[:時])/g, (_, w, h) => (+h < 12 ? '午後' : '') + h)
+    // ISO 形式（2026-11-05T18:00:00+09:00）は秒とタイムゾーンを外す
+    .replace(/(20\d{2}-\d{1,2}-\d{1,2})T(\d{1,2}:\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+\-]\d{2}:?\d{2})?/g, '$1 $2')
+    // 「10.30(金)」「10-30(金)」のように曜日が続くものは月/日として読む
+    .replace(/(?<![\d.\/\-])(\d{1,2})[.\-](\d{1,2})(?=\s*[(（][日月火水木金土])/g, '$1/$2')
+    // 「10月30日(金)〜31日(土)」「10/30〜31」の終わりの日に月を補う
+    .replace(/((\d{4})年)?(\d{1,2})月(\d{1,2})日([^\n\d]{0,12}?(?:\d{1,2}[:時]\d{0,2}分?)?[^\n\d]{0,4}?[〜~\-–ー－]\s*)(\d{1,2})日/g, (m0, y0, y, mo, d, mid, d2) => `${y0 || ''}${mo}月${d}日${mid}${y ? y + '年' : ''}${mo}月${d2}日`)
+    // 「2026年10月30日」を「2026/10/30」と書く代わりに「2026年10/30」と書くもの
+    .replace(/(20\d{2})年\s*(\d{1,2})\/(\d{1,2})/g, '$1/$2/$3');
+}
 function findDates(raw, now = new Date(), opt = {}) {
   let text = String(raw || '').normalize('NFKC').replace(/\r/g, '');
   // 写真の文字読み取りは字の間に空白が入りやすいので詰める
   const J = /[\d年月日時分:\/()曜〜~\-぀-ヿ一-鿿]/;
   text = text.replace(/(?<!\d)(\d)[ \t]+(?=\d(?!\d))/g, '$1') // 「1 1 月」→「11月」（1桁ずつ離れた数字だけ）
     .replace(/(\S)[ \t]+(?=(\S))/g, (m, a, b) => J.test(a) && J.test(b) && !(/\d/.test(a) && /\d/.test(b)) ? a : m);
+  text = normDateText(text);
   const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
   const DATE = /(?:(\d{4})年|令和(\d{1,2}|元)年)?(\d{1,2})月(\d{1,2})日|(?<![\d\-.\/])(20\d{2})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?![\d.])|(?<![\d\/.])(\d{1,2})\/(\d{1,2})(?![\d\/])/g;
   const TIME = /(午前|午後|AM|PM)?(\d{1,2})(?::(\d{2})|時(?:(\d{1,2})分|半)?)/gi;
@@ -637,7 +665,7 @@ function findDates(raw, now = new Date(), opt = {}) {
         // 文の形なら言い切りの部分を落とす（「出欠票は11月7日までに担任へ提出してください」→「出欠票は担任へ提出」）
         .replace(/(を|して|し)?(ください|下さい|お願いします|お願いいたします|お願い致します)。?$/, '').replace(/\s*(までに|までは|まで|迄に|迄)\s*/g, ' ');
       times.forEach(t => { if (t.word) label = label.replace(t.word, ' '); });
-      label = cleanTitle(label).replace(/^(日時|日程|日付|開催日時|開催日|期間|時間|とき|日|時)\s*/, '').replace(/(日時|日程)$/, '').replace(/\s*(から|より|頃|ごろ)$/, '').replace(/(は|が|を|に)$/, '').trim();
+      label = cleanTitle(label).replace(/^(日時|日程|日付|開催日時|開催日|期間|時間|とき|日|時)\s*/, '').replace(/(日時|日程)$/, '').replace(/\s*(から|より|頃|ごろ)$/, '').replace(/(は|が|を|に)$/, '').replace(/\s+(at|on|by|from|until|is|are|:)$/i, '').trim();
       if (!wordy(label)) label = '';
       // 日付だけの行は、すぐ上の見出し行（「■説明会」など）を名前にする
       let head = '';

@@ -1454,9 +1454,10 @@ function scanText() {
   // 券種ごとに同じ受付期間が書かれているページなどで、同じ日時の候補が重ならないようにする（並びが先＝大事な方を残す）
   const pageMode1 = SC.pageTitle && SC.pageUrl === SC.url, seenAt = new Set();
   SC.cands = SC.cands.filter(c => { const k = fmtLocal(c.due) + (pageMode1 ? '' : '|' + (c.tag || c.title)); if (seenAt.has(k)) return false; seenAt.add(k); return true; });
-  const up = SC.cands.filter(c => !c.past).length;
-  // 抽選発表・締切・購入期限は最初から選んでおく。ほかは候補が少ないときだけ選ぶ
-  SC.sel = new Set(SC.cands.map((c, i) => [c, i]).filter(([c]) => { const k = fmtLocal(c.due) + c.title; return keep.has(k) ? keep.get(k) : !c.past && (c.prio <= 1 || up <= 3); }).map(([, i]) => i));
+  const up = SC.cands.filter(c => !c.past).length, hasResult = SC.cands.some(c => !c.past && c.kind === 'result');
+  // 結果発表・当選発表があれば、それだけを最初から選んでおく。なければ締切・購入期限、候補が少なければ全部
+  const pick = c => !c.past && (hasResult ? c.kind === 'result' : c.prio <= 1 || up <= 3);
+  SC.sel = new Set(SC.cands.map((c, i) => [c, i]).filter(([c]) => { const k = fmtLocal(c.due) + c.title; return keep.has(k) ? keep.get(k) : pick(c); }).map(([, i]) => i));
   const m = text.match(/https?:\/\/[^\s<>"'）)]+/); SC.url = m ? normUrl(m[0]) : null;
   if (SC.url !== SC.pageUrl) SC.pageMsg = '';
   drawScan();
