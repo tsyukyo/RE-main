@@ -1462,6 +1462,9 @@ function scanText() {
   SC.cands = findDates(text, new Date(), { title: SC.hint }).sort((a, b) => a.past - b.past || a.prio - b.prio || a.due - b.due); SC.titles = {};
   // URL のページから読んだときは、どの候補もページのタイトルをそのまま使う（何の期日かはメモに残す）
   if (SC.pageTitle && SC.pageUrl === SC.url) SC.cands.forEach(c => { c.what = c.title; c.title = SC.pageTitle; });
+  // 券種ごとに同じ受付期間が書かれているページなどで、同じ日時の候補が重ならないようにする（並びが先＝大事な方を残す）
+  const pageMode1 = SC.pageTitle && SC.pageUrl === SC.url, seenAt = new Set();
+  SC.cands = SC.cands.filter(c => { const k = fmtLocal(c.due) + (pageMode1 ? '' : '|' + (c.tag || c.title)); if (seenAt.has(k)) return false; seenAt.add(k); return true; });
   const up = SC.cands.filter(c => !c.past).length;
   // 抽選発表・締切・購入期限は最初から選んでおく。ほかは候補が少ないときだけ選ぶ
   SC.sel = new Set(SC.cands.map((c, i) => [c, i]).filter(([c]) => { const k = fmtLocal(c.due) + c.title; return keep.has(k) ? keep.get(k) : !c.past && (c.prio <= 1 || up <= 3); }).map(([, i]) => i));

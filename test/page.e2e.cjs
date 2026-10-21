@@ -12,7 +12,7 @@ const iconv = s => new TextEncoder().encode(s); // UTF-8 のページ
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"MusicEvent","name":"冬のアコースティックライブ 2026","startDate":"2026-12-13T17:00:00+09:00"}</script>
     <script>document.title='x'</script><style>p{color:red}</style></head>
     <body><nav>ホーム 11月30日 メニュー</nav><h1>冬のアコースティックライブ 2026</h1>
-    <table><tr><th>一般発売</th><td>2026年11月1日(日)10:00〜</td></tr><tr><th>お支払い期限</th><td>11/4(水)23:59まで</td></tr></table></body></html>`;
+    <table><tr><th>一般発売</th><td>2026年11月1日(日)10:00〜</td></tr><tr><th>お支払い期限</th><td>11/4(水)23:59まで</td></tr></table><h2>S席</h2><p>一般発売 2026年11月1日(日)10:00〜</p><p>お支払い期限 11/4(水)23:59まで</p></body></html>`;
   await p.route('**/api/page', async r => { asked.push(r.request().postDataJSON().url); await r.fulfill({ status: 200, headers: { 'content-type': 'application/octet-stream', 'x-page-type': 'text/html; charset=utf-8', 'x-page-url': 'https://ticket.example.jp/e/1' }, body: Buffer.from(iconv(html)) }); });
   await p.goto(BASE + '/?demo'); await p.waitForTimeout(800);
   // 設定がオフのときは案内だけ
@@ -34,6 +34,7 @@ const iconv = s => new TextEncoder().encode(s); // UTF-8 のページ
   assert.deepEqual(asked, ['https://ticket.example.jp/e/1']);
   assert.ok(text.startsWith('https://ticket.example.jp/e/1\n'));
   assert.ok(!/document\.title|color:red|メニュー/.test(text));
+  assert.equal(got.length, 3, '同じ日時は1件にまとめる');
   // タイトルはどれもページのタイトル（末尾のサイト名は外す）
   assert.ok(got.every(g => g.startsWith('冬のアコースティックライブ 2026 | ')), 'ページのタイトル');
   assert.ok(got.some(g => /12\/13.*17:00/.test(g)), 'JSON-LD の公演日');
