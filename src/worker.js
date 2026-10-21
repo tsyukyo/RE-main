@@ -3,13 +3,16 @@
 import { DurableObject } from 'cloudflare:workers';
 import { genVapidKeys, sendPush } from './webpush.js';
 
+// 受け付けるプッシュサービス（Apple・Google・Mozilla・Microsoft）。ほかの宛先へは送らない
 const PUSH_HOSTS = [/(^|\.)push\.apple\.com$/, /^fcm\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/];
-const MAX_TIMES = 300;
-const MAX_AHEAD = 400 * 86400000;
+const MAX_TIMES = 300;              // 1端末が予約できる時刻の数
+const MAX_AHEAD = 400 * 86400000;   // 予約できるのは 400 日先まで
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+// 利用者に見せるエラー（status は HTTP ステータス）
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status });
 
+// 購読情報を確かめ、必要な項目だけにする。開発時（ALLOW_ANY_ENDPOINT=1）は偽のプッシュサービスも許す
 function checkSub(sub, env) {
   if (!sub || typeof sub.endpoint !== 'string' || !sub.keys || typeof sub.keys.p256dh !== 'string' || typeof sub.keys.auth !== 'string') throw bad('購読情報がありません');
   let u; try { u = new URL(sub.endpoint); } catch (e) { throw bad('宛先が不正です'); }
@@ -17,6 +20,7 @@ function checkSub(sub, env) {
   if (!devAny && (u.protocol !== 'https:' || !PUSH_HOSTS.some(re => re.test(u.hostname)))) throw bad('対応していない宛先です');
   return { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } };
 }
+// 時刻の列を、重複なし・昇順・少し前〜400日先・最大300件にそろえる
 function checkTimes(times) {
   if (!Array.isArray(times)) throw bad('times がありません');
   const now = Date.now();
@@ -32,6 +36,7 @@ const PAGE_HEADERS = {
   'accept-language': 'ja-JP,ja;q=0.9',
   'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'upgrade-insecure-requests': '1',
 };
+// 取り寄せてよい URL か確かめる。self は自分のホスト名
 function checkPageUrl(raw, self) {
   let u; try { u = new URL(raw); } catch (e) { throw bad('URL が正しくありません'); }
   if (!/^https?:$/.test(u.protocol) || u.username || u.password) throw bad('http/https のページだけ読めます');
@@ -41,6 +46,16 @@ function checkPageUrl(raw, self) {
   if (!h.includes('.') || /^[\d.]+$/.test(h) || h.startsWith('[') || /(\.local|\.internal|\.localhost|\.lan|\.home|\.arpa)$/.test(h) || h === self) throw bad('このページは読めません');
   return u;
 }
+// 本文を max バイトまで読む（それより先は読まずに切る）
+async function readLimited(body, max) {
+  const reader = body.getReader(), parts = []; let n = 0;
+  while (n < max) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
+  reader.cancel().catch(() => {});
+  const out = new Uint8Array(Math.min(n, max)); let o = 0;
+  for (const p of parts) { const k = Math.min(p.length, out.length - o); out.set(p.subarray(0, k), o); o += k; if (o >= out.length) break; }
+  return out;
+}
+// ページを取り寄せる。転送は1回ずつ自分で追い、転送先も checkPageUrl で確かめる（転送で社内向けの宛先へ行かないように）
 async function fetchPage(raw, self) {
   let u = checkPageUrl(raw, self), res;
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), PAGE_TIMEOUT);
@@ -55,12 +70,7 @@ async function fetchPage(raw, self) {
     if (!res.ok) throw bad(`ページを開けませんでした（${res.status}）`, 502);
     const type = res.headers.get('content-type') || '';
     if (!/text\/html|application\/xhtml|text\/plain/i.test(type)) throw bad('Web ページではありません', 415);
-    const reader = res.body.getReader(), parts = []; let n = 0;
-    while (n < PAGE_MAX) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
-    reader.cancel().catch(() => {});
-    const out = new Uint8Array(Math.min(n, PAGE_MAX)); let o = 0;
-    for (const p of parts) { const k = Math.min(p.length, out.length - o); out.set(p.subarray(0, k), o); o += k; if (o >= out.length) break; }
-    return { body: out, type, url: u.href };
+    return { body: await readLimited(res.body, PAGE_MAX), type, url: u.href };
   } catch (e) {
     if (e.name === 'AbortError') throw bad('ページの読み込みに時間がかかりすぎました', 504);
     if (e.status) throw e;
@@ -68,11 +78,14 @@ async function fetchPage(raw, self) {
   } finally { clearTimeout(timer); }
 }
 
+// 宛先 URL から Durable Object の名前を作る（宛先そのものを名前に残さない）
 async function sha256(s) {
   const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// API: GET /api/vapid（公開鍵）, POST /api/sync（予定の登録）, /api/test（テスト通知）, /api/clear（購読解除）, /api/page（ページ取得）
+// /api/ 以外は public/ の静的ファイルを返す
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -86,6 +99,7 @@ export default {
         const { url: target } = await req.json().catch(() => ({}));
         if (typeof target !== 'string' || target.length > 2048) throw bad('URL がありません');
         const pg = await fetchPage(target, url.hostname);
+        // 中身はこのオリジンの画面として表示されないよう、ダウンロード扱い・スクリプト禁止で返す
         return new Response(pg.body, { headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment', 'content-security-policy': "default-src 'none'; sandbox", 'x-page-type': pg.type.slice(0, 200), 'x-page-url': pg.url.slice(0, 2048), 'cache-control': 'no-store' } });
       }
       const text = await req.text();
@@ -116,6 +130,7 @@ export class Keys extends DurableObject {
 
 // 端末（購読）ごとに1つ。いちばん近い時刻にアラームを掛け、時刻が来たら中身なしに近い通知（時刻だけ）を送る
 export class Scheduler extends DurableObject {
+  // 予定の時刻を丸ごと置き換え、いちばん近い時刻にアラームを掛け直す
   async sync(sub, times, origin) {
     await this.ctx.storage.put({ sub, times, origin });
     await this.arm(times);
@@ -131,10 +146,12 @@ export class Scheduler extends DurableObject {
     await this.ctx.storage.deleteAlarm();
     return { ok: true };
   }
+  // times[0]（昇順の先頭）にアラームを掛ける。過ぎていればすぐ鳴らす
   async arm(times) {
     if (times.length) await this.ctx.storage.setAlarm(Math.max(times[0], Date.now()));
     else await this.ctx.storage.deleteAlarm();
   }
+  // アラーム: 時刻が来た分をまとめて1通で知らせ（中身は時刻と件数だけ）、残りの先頭にアラームを掛け直す
   async alarm() {
     const st = await this.ctx.storage.get(['sub', 'times', 'origin']);
     const sub = st.get('sub'), times = st.get('times') || [], origin = st.get('origin');

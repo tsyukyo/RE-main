@@ -1,8 +1,12 @@
-// ===== りまいん engine: 日付ユーティリティ / 祝日 / 繰り返しルール / 自然文パーサー =====
-const WD = '日月火水木金土';
+// ===== RE:main engine: 日付ユーティリティ / 祝日 / 繰り返しルール / 自然文パーサー =====
+// アプリ画面・Service Worker・Node のテストで共通に使う。ブラウザでは普通の <script> として読み込むため、
+// ここで宣言した名前（WD, pad, fmtLocal など）はアプリ側のスクリプトからもそのまま使える
+// 日時はすべて端末のローカル時刻で扱い、保存形式は 'YYYY-MM-DDTHH:mm'（秒・タイムゾーンなし）
+const WD = '日月火水木金土'; // getDay() の番号（0=日曜）で引く曜日の1文字
 const pad = n => String(n).padStart(2, '0');
 const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const fmtLocal = d => `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// 'YYYY-MM-DDTHH:mm'（時刻は省略可）をローカル時刻の Date にする。読めなければ null
 function parseLocal(s) {
   if (!s) return null;
   const [a, b = '00:00'] = String(s).split('T');
@@ -11,12 +15,22 @@ function parseLocal(s) {
   const d = new Date(y, m - 1, dd, h || 0, mi || 0);
   return isNaN(d) ? null : d;
 }
-const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()); // その日の 0:00
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-const daysBetween = (a, b) => Math.round((dayStart(b) - dayStart(a)) / 864e5);
-const mondayOf = d => addDays(dayStart(d), -((d.getDay() + 6) % 7));
+const daysBetween = (a, b) => Math.round((dayStart(b) - dayStart(a)) / 864e5); // 日付の差（時刻は無視。夏時間の 23/25 時間の日も丸めて吸収）
+const mondayOf = d => addDays(dayStart(d), -((d.getDay() + 6) % 7)); // その週の月曜 0:00
 const monthsBetween = (a, b) => (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth();
-const lastDay = (y, m) => new Date(y, m + 1, 0).getDate();
+const lastDay = (y, m) => new Date(y, m + 1, 0).getDate(); // m は 0 始まりの月。その月の日数
+// 日付 d の 'HH:MM' の時刻（秒は 0）
+const atTime = (d, hhmm) => { const [h, m] = hhmm.split(':').map(Number); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m); };
+// 次の正時（14:20 → 15:00）
+const nextHour = (now = new Date()) => { const d = new Date(now); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); return d; };
+// 曜日を月曜始まりで並べるための比較関数（日曜を最後にする）
+const monFirst = (a, b) => ((a + 6) % 7) - ((b + 6) % 7);
+const isWeekend = d => d.getDay() === 0 || d.getDay() === 6;
+// d がその月の「第 n ○曜日」の週にあたるか（曜日は呼び出し側で確かめる）。n = -1 は最終週
+const isNthWeek = (d, n) => (n > 0 ? Math.ceil(d.getDate() / 7) === n : d.getDate() + 7 > lastDay(d.getFullYear(), d.getMonth()));
+// 単位つきで日時を進める。月を進めて日が無いとき（1/31 の1ヶ月後など）は月末に寄せる
 function addUnit(d, unit, n) {
   const x = new Date(d);
   if (unit === 'minute') x.setMinutes(x.getMinutes() + n);
@@ -30,18 +44,20 @@ function addUnit(d, unit, n) {
 
 // ---- 日本の祝日（内閣府の規則に基づく計算。特例年の移動は未対応） ----
 const holCache = {};
+const mdKey = d => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; // 祝日表のキー 'MM-DD'
+// y 年の祝日を Map('MM-DD' → 名前) で返す。年ごとに一度だけ計算して覚えておく
 function holidays(y) {
   if (holCache[y]) return holCache[y];
   const S = new Map();
   const add = (m, d, n) => S.set(`${pad(m)}-${pad(d)}`, n);
-  const nthMon = (m, n) => { const f = new Date(y, m - 1, 1).getDay(); return 1 + ((8 - f) % 7) + (n - 1) * 7; };
+  const nthMon = (m, n) => { const f = new Date(y, m - 1, 1).getDay(); return 1 + ((8 - f) % 7) + (n - 1) * 7; }; // m 月の第 n 月曜の日付
   add(1, 1, '元日'); add(1, nthMon(1, 2), '成人の日'); add(2, 11, '建国記念の日'); add(2, 23, '天皇誕生日');
   add(3, Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4)), '春分の日');
   add(4, 29, '昭和の日'); add(5, 3, '憲法記念日'); add(5, 4, 'みどりの日'); add(5, 5, 'こどもの日');
   add(7, nthMon(7, 3), '海の日'); add(8, 11, '山の日'); add(9, nthMon(9, 3), '敬老の日');
   add(9, Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4)), '秋分の日');
   add(10, nthMon(10, 2), 'スポーツの日'); add(11, 3, '文化の日'); add(11, 23, '勤労感謝の日');
-  const key = d => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const key = mdKey;
   // 国民の休日（祝日に挟まれた平日）
   for (let d = new Date(y, 0, 2); d.getFullYear() === y; d = addDays(d, 1)) {
     if (!S.has(key(d)) && d.getDay() !== 0 && S.has(key(addDays(d, -1))) && S.has(key(addDays(d, 1)))) S.set(key(d), '国民の休日');
@@ -56,7 +72,7 @@ function holidays(y) {
   }
   return (holCache[y] = S);
 }
-const holidayName = d => holidays(d.getFullYear()).get(`${pad(d.getMonth() + 1)}-${pad(d.getDate())}`) || null;
+const holidayName = d => holidays(d.getFullYear()).get(mdKey(d)) || null;
 
 // ---- 繰り返しルール ----
 // rule = { freq, interval, start:'YYYY-MM-DD', times:['HH:MM'], byDay:[0-6], onlyDays:[0-6], byMonthDay:[1..31|-1],
@@ -67,7 +83,10 @@ const holidayName = d => holidays(d.getFullYear()).get(`${pad(d.getMonth() + 1)}
 // 条件 = { t, not } t: day(v: weekday|weekend|holiday|offday|bizday) / wd(v:[0-6]) / mday(from,to) / last(n) /
 //          month(v:[1-12]) / nth(n, wd) / parity(v) / period(from,to)
 // freq: daily | weekly | monthly | yearly | parity | hourly | minutely | afterDone
-const DATE_FREQS = ['daily', 'weekly', 'monthly', 'yearly', 'parity'];
+const DATE_FREQS = ['daily', 'weekly', 'monthly', 'yearly', 'parity']; // 「日付 × 時刻」で決まるルール
+// 時間・分ごとのルールか。そうなら進める単位（'hour' / 'minute'）を返す
+const subDailyUnit = r => (r.freq === 'hourly' ? 'hour' : r.freq === 'minutely' ? 'minute' : null);
+// 繰り返しの基本設定（freq・間隔・曜日など）だけで見て、日 d が通知日にあたるか。詳細条件は condMatch で別に見る
 function baseDayMatches(r, d) {
   const st = parseLocal((r.start || ymd(d)) + 'T00:00');
   if (d < dayStart(st)) return false;
@@ -86,10 +105,7 @@ function baseDayMatches(r, d) {
       if (r.bizBefore && !r.byNth) return bizMonthMatch(r, st, d, r.byMonthDay && r.byMonthDay.length ? r.byMonthDay : [st.getDate()], iv);
       if (monthsBetween(st, d) % iv !== 0) return false;
       const L = lastDay(d.getFullYear(), d.getMonth());
-      if (r.byNth) {
-        if (d.getDay() !== r.byNth.wd) return false;
-        return r.byNth.n > 0 ? Math.ceil(d.getDate() / 7) === r.byNth.n : d.getDate() + 7 > L;
-      }
+      if (r.byNth) return d.getDay() === r.byNth.wd && isNthWeek(d, r.byNth.n);
       const md = r.byMonthDay && r.byMonthDay.length ? r.byMonthDay : [st.getDate()];
       return md.some(x => (x === -1 ? L : Math.min(x, L)) === d.getDate()); // 31日指定は短い月では月末に寄せる
     }
@@ -103,7 +119,7 @@ function baseDayMatches(r, d) {
   }
   return false;
 }
-const isOffDay = d => d.getDay() === 0 || d.getDay() === 6 || !!holidayName(d);
+const isOffDay = d => isWeekend(d) || !!holidayName(d); // 土日祝
 // 指定日が土日祝なら前の平日へ。ずらした結果が前の月に入ることもあるので、翌月分も確かめる
 function bizMonthMatch(r, st, d, md, iv) {
   for (const off of [0, 1]) {
@@ -119,6 +135,7 @@ function bizMonthMatch(r, st, d, md, iv) {
   return false;
 }
 // ---- 詳細条件（AND / OR / もし〜なら） ----
+// 条件 c（入れ子の AND / OR を含む）を日 d が満たすか。条件が空なら常に true
 function condMatch(c, d) {
   if (!c) return true;
   if (c.items) {
@@ -133,7 +150,7 @@ function condMatch(c, d) {
     case 'mday': { const a = Math.min(+c.from || 1, L), b = Math.min(+c.to || +c.from || 31, L); ok = dt >= Math.min(a, b) && dt <= Math.max(a, b); break; }
     case 'last': ok = dt > L - Math.max(1, +c.n || 1); break;
     case 'month': ok = (c.v || []).includes(d.getMonth() + 1); break;
-    case 'nth': ok = wd === +c.wd && (+c.n > 0 ? Math.ceil(dt / 7) === +c.n : dt + 7 > L); break;
+    case 'nth': ok = wd === +c.wd && isNthWeek(d, +c.n); break;
     case 'parity': ok = dt % 2 === (c.v === 'even' ? 0 : 1); break;
     case 'period': { const k = ymd(d); ok = (!c.from || k >= c.from) && (!c.to || k <= c.to); break; }
     default: ok = true;
@@ -141,6 +158,7 @@ function condMatch(c, d) {
   return c.not ? !ok : !!ok;
 }
 const baseOk = (r, d) => baseDayMatches(r, d) && condMatch(r.cond, d);
+// 「もし〜なら」のうち、日 d に最初に当てはまるもの
 const ifAct = (r, d) => (r.ifs || []).find(x => x && x.cond && condMatch(x.cond, d)) || null;
 // ずらし先: 前（次）の、元の条件に関係なく「平日かつ祝日でない」日
 function shiftDay(d, dir) { let t = addDays(d, dir); for (let i = 0; i < 14 && isOffDay(t); i++) t = addDays(t, dir); return t; }
@@ -162,7 +180,7 @@ function dayPlan(r, d) {
   return null;
 }
 const dayMatches = (r, d) => !!dayPlan(r, d);
-const WDJ = '日月火水木金土';
+// 条件を「平日 かつ (月末 または 金曜)」のような文にする。top 以外の入れ子は括弧でくくる
 function describeCond(c, top = true) {
   if (!c) return '';
   if (c.items) {
@@ -173,18 +191,18 @@ function describeCond(c, top = true) {
   let t;
   switch (c.t) {
     case 'day': t = { weekday: '平日', weekend: '土日', holiday: '祝日', offday: '土日祝', bizday: '平日(祝日以外)' }[c.v]; break;
-    case 'wd': t = (c.v || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => WDJ[i]).join('・') + '曜'; break;
+    case 'wd': t = (c.v || []).slice().sort(monFirst).map(i => WD[i]).join('・') + '曜'; break;
     case 'mday': t = +c.from === +c.to || !c.to ? `${c.from}日` : `${c.from}〜${c.to}日`; break;
     case 'last': t = +c.n > 1 ? `月末${c.n}日間` : '月末'; break;
     case 'month': t = (c.v || []).slice().sort((a, b) => a - b).join('・') + '月'; break;
-    case 'nth': t = `${+c.n > 0 ? '第' + c.n : '最終'}${WDJ[+c.wd]}曜`; break;
+    case 'nth': t = `${+c.n > 0 ? '第' + c.n : '最終'}${WD[+c.wd]}曜`; break;
     case 'parity': t = c.v === 'even' ? '偶数日' : '奇数日'; break;
     case 'period': t = `${c.from ? c.from.slice(5).replace('-', '/') : ''}〜${c.to ? c.to.slice(5).replace('-', '/') : ''}`; break;
     default: t = '?';
   }
   return c.not ? `${t}以外` : t;
 }
-const ruleTimes = r => (r.times && r.times.length ? r.times : ['09:00']).slice().sort();
+const ruleTimes = r => (r.times && r.times.length ? r.times : ['09:00']).slice().sort(); // 時刻の指定がなければ 9:00
 // after より後の最初の発生日時（日付系ルール）
 function nextAfter(r, after) {
   const ts = ruleTimes(r);
@@ -192,28 +210,29 @@ function nextAfter(r, after) {
   for (let i = 0; i < 2000; i++, d = addDays(d, 1)) {
     const plan = dayPlan(r, d); if (!plan) continue;
     for (const t of plan.times || ts) {
-      const [h, m] = t.split(':').map(Number);
-      const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m);
+      const dt = atTime(d, t);
       if (dt > after) return dt;
     }
   }
   return null;
 }
-// ルールの最初の発生日時を決め、start を確定させる
+// ルールの最初の発生日時を決め、start を確定させる（r を書き換える）
 function firstOccurrence(r, now) {
   if (DATE_FREQS.includes(r.freq)) {
-    const probe = { ...r, interval: r.freq === 'yearly' ? 1 : 1, start: ymd(now) };
+    // 間隔（隔週など）の数え始めは最初の通知日にしたいので、まず間隔 1 で最初に当てはまる日を探す
+    const probe = { ...r, interval: 1, start: ymd(now) };
     const first = nextAfter(probe, now);
     if (!first) return null;
     r.start = ymd(first);
     return first;
   }
-  if (r.freq === 'hourly' || r.freq === 'minutely') {
+  const unit = subDailyUnit(r);
+  if (unit) {
+    // 時刻の指定があれば今日のその時刻から、なければ今から（「毎時」は正時から）数えて、最初の未来の回
     const t = r.times && r.times[0];
     let base;
-    if (t) { const [h, m] = t.split(':').map(Number); base = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m); }
+    if (t) base = atTime(now, t);
     else { base = new Date(now); base.setSeconds(0, 0); if (r.freq === 'hourly' && r.interval === 1) { base.setMinutes(0); } }
-    const unit = r.freq === 'hourly' ? 'hour' : 'minute';
     while (base <= now) base = addUnit(base, unit, r.interval || 1);
     r.start = ymd(base);
     return base;
@@ -221,10 +240,10 @@ function firstOccurrence(r, now) {
   if (r.freq === 'afterDone') return afterDoneNext(r, now);
   return null;
 }
+// 「完了から N 後」の次回。日単位以上なら時刻はルールの時刻にそろえる
 function afterDoneNext(r, now) {
-  let d = addUnit(now, r.unit || 'day', r.interval || 1);
-  if (!['minute', 'hour'].includes(r.unit)) { const [h, m] = ruleTimes(r)[0].split(':').map(Number); d.setHours(h, m, 0, 0); }
-  return d;
+  const d = addUnit(now, r.unit || 'day', r.interval || 1);
+  return ['minute', 'hour'].includes(r.unit) ? d : atTime(d, ruleTimes(r)[0]);
 }
 // 完了時に次回日時を計算（null なら終了）
 function nextOnComplete(rem, now) {
@@ -234,15 +253,17 @@ function nextOnComplete(rem, now) {
   const cur = parseLocal(rem.due) || now;
   const after = cur > now ? cur : now;
   let next = null;
+  const unit = subDailyUnit(r);
   if (r.freq === 'afterDone') next = afterDoneNext(r, now);
-  else if (r.freq === 'hourly' || r.freq === 'minutely') {
+  else if (unit) {
+    // 時間・分ごとは予定の時刻から刻みを保ったまま進める（遅れて完了しても刻みがずれない）
     next = new Date(cur);
-    const unit = r.freq === 'hourly' ? 'hour' : 'minute';
     do { next = addUnit(next, unit, r.interval || 1); } while (next <= after);
   } else next = nextAfter(r, after);
   if (next && r.until && ymd(next) > r.until) return null;
   return next;
 }
+// 今後の予定を n 件まで並べる（詳細画面の「今後の予定」用）。「完了から N 後」は次回だけ
 function upcoming(rem, n, now) {
   const out = [];
   const r = rem.rule;
@@ -254,9 +275,8 @@ function upcoming(rem, n, now) {
   while (out.length < n) {
     cnt++;
     if (r.count && cnt >= r.count) break;
-    let next;
-    if (r.freq === 'hourly' || r.freq === 'minutely') next = addUnit(d, r.freq === 'hourly' ? 'hour' : 'minute', r.interval || 1);
-    else next = nextAfter(r, d);
+    const unit = subDailyUnit(r);
+    const next = unit ? addUnit(d, unit, r.interval || 1) : nextAfter(r, d);
     if (!next || (r.until && ymd(next) > r.until)) break;
     out.push(next); d = next;
   }
@@ -265,12 +285,14 @@ function upcoming(rem, n, now) {
 
 // ---- 表示用 ----
 const UNIT_LABEL = { minute: '分', hour: '時間', day: '日', week: '週間', month: 'ヶ月', year: '年' };
+// 曜日の組を「平日」「土日」「月・水・金曜」のように書く
 function daysLabel(days) {
   const s = [...days].sort().join(',');
   if (s === '1,2,3,4,5') return '平日';
   if (s === '0,6') return '土日';
-  return [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(x => WD[x]).join('・') + '曜';
+  return [...days].sort(monFirst).map(x => WD[x]).join('・') + '曜';
 }
+// ルールを「隔週 火曜 7:30・祝日除く」のような一行の説明にする
 function describeRule(r) {
   if (!r) return '';
   const iv = r.interval || 1;
@@ -304,6 +326,7 @@ function describeRule(r) {
   if (r.count) s += `・${r.count}回まで`;
   return s;
 }
+// 通知日時を「今日 9:00」「明日 9:00」「10/25(土) 18:30」のように短く書く
 function fmtDue(d, now = new Date()) {
   if (!d) return '';
   const t = `${d.getHours()}:${pad(d.getMinutes())}`;
@@ -317,6 +340,7 @@ function fmtDue(d, now = new Date()) {
 }
 
 // ---- 自然文パーサー ----
+// 全角英数・全角記号を半角に、漢数字（「十五日」「三ヶ月」など）を算用数字にそろえる
 function normalize(raw) {
   let s = String(raw);
   s = s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
@@ -332,12 +356,17 @@ function normalize(raw) {
   return s;
 }
 const WDRE = '[日月火水木金土]';
+// 文字列に出てくる曜日の文字を、重複なしの曜日番号の配列にする（「月水金」→ [1, 3, 5]）
 function parseDays(str) { return [...new Set((str.match(new RegExp(WDRE, 'g')) || []).map(c => WD.indexOf(c)))]; }
 
+// 話し言葉の1文を解析して { title, due, rule, nag, notes, warn, url } を返す。
+// 見つけた表現は take() で文から取り除いていき、最後に残った部分をタイトルにする。
+// notes はユーザーに見せる「こう解釈しました」、warn は注意（過去の日時など）
 function parseInput(raw, now = new Date()) {
   let s = ' ' + normalize(raw) + ' ';
   const notes = [], warn = [];
   let rule = null, nag = null, date = null, relDue = null, period = null;
+  // re に当たった部分を文から取り除いて fn に渡す。当たらなければ false（|| でつないで最初に当たったものだけ使う）
   const take = (re, fn) => { const m = s.match(re); if (!m) return false; s = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length); fn(m); return true; };
 
   // 0) URL・「」のメッセージ・話し言葉のノイズ
@@ -407,8 +436,9 @@ function parseInput(raw, now = new Date()) {
       || take(/毎(朝|晩|夜|夕方?|昼)/, m => { R({ freq: 'daily' }); period = m[1].startsWith('夕') ? '夕方' : m[1]; })
       || take(/毎日/, () => R({ freq: 'daily' }));
     // 曜日フィルター（平日・土日）。単独なら毎週、ほかのルールと併用なら絞り込み
-    take(/平日|ウィークデー/, () => { if (!rule) R({ freq: 'weekly', byDay: [1, 2, 3, 4, 5] }); else if (rule.freq === 'weekly') rule.byDay = [1, 2, 3, 4, 5]; else rule.onlyDays = [1, 2, 3, 4, 5]; })
-      || take(/毎週末|土日/, () => { if (!rule) R({ freq: 'weekly', byDay: [0, 6] }); else if (rule.freq === 'weekly') rule.byDay = [0, 6]; else rule.onlyDays = [0, 6]; });
+    const dayFilter = days => { if (!rule) R({ freq: 'weekly', byDay: days }); else if (rule.freq === 'weekly') rule.byDay = days; else rule.onlyDays = days; };
+    take(/平日|ウィークデー/, () => dayFilter([1, 2, 3, 4, 5]))
+      || take(/毎週末|土日/, () => dayFilter([0, 6]));
     if (rule && ['daily', 'parity'].includes(rule.freq)) {
       take(new RegExp(`((?:${WDRE}曜日?(?:[・、,と]\\s*)?)+)(?:の|だけ|のみ)`), m => { rule.onlyDays = parseDays(m[1]); });
     }
@@ -492,24 +522,22 @@ function parseInput(raw, now = new Date()) {
     } else {
       if (uniqTimes.length) rule.times = [uniqTimes[0]];
       if (rule.freq === 'afterDone' && (date || uniqTimes.length)) {
-        const d = date || dayStart(now); const [h, mi] = (uniqTimes[0] || '09:00').split(':').map(Number);
-        due = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi);
+        // 「完了から1ヶ月後 明日9時」のように初回の日時があれば、それを最初の通知にする
+        due = atTime(date || dayStart(now), uniqTimes[0] || '09:00');
         if (due <= now && !date) due = addDays(due, 1);
       } else due = firstOccurrence(rule, now);
     }
     if (!due) warn.push('条件に合う日が見つかりませんでした');
   } else if (date || uniqTimes.length) {
-    const d = date || dayStart(now);
-    const [h, mi] = (uniqTimes[0] || '09:00').split(':').map(Number);
-    due = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi);
-    const nextHour = () => { const d2 = new Date(now); d2.setMinutes(0, 0, 0); d2.setHours(d2.getHours() + 1); return d2; };
+    // 単発。日付だけなら 9:00、時刻だけなら今日（過ぎていれば明日）
+    due = atTime(date || dayStart(now), uniqTimes[0] || '09:00');
     // 「今夜」「今日の夕方」のように時刻を補った場合、その時刻が過ぎていれば、過去にせず次の正時にする
     // （夕方以降に「夜」「寝る前」のように日付なしで書いたときも、今夜のこととみなす）
     if (vague && due <= now && ((date && +date === +dayStart(now)) || (!date && +uniqTimes[0].slice(0, 2) >= 17 && now.getHours() >= 17))) {
-      const was = uniqTimes[0].replace(/^0/, ''); due = nextHour(); notes.push(`${was} は過ぎているので ${due.getHours()}:00 にしました`);
+      const was = uniqTimes[0].replace(/^0/, ''); due = nextHour(now); notes.push(`${was} は過ぎているので ${due.getHours()}:00 にしました`);
     } else if (!date && due <= now) { due = addDays(due, 1); notes.push('この時刻は過ぎているので明日にしました'); }
     else if (date && !uniqTimes.length) {
-      if (due <= now) { due = new Date(now); due.setMinutes(0, 0, 0); due.setHours(due.getHours() + 1); notes.push(`9:00 は過ぎているので ${due.getHours()}:00 にしました`); }
+      if (due <= now) { due = nextHour(now); notes.push(`9:00 は過ぎているので ${due.getHours()}:00 にしました`); }
       else notes.push('時刻の指定がないので 9:00 にしました');
     }
     if (uniqTimes.length > 1) {
@@ -535,7 +563,7 @@ function parseInput(raw, now = new Date()) {
 // ---- グループ（時間差で順に通知するリスト） ----
 // group = { start:'YYYY-MM-DDTHH:mm', steps:[{ title, url, after:{ value, unit } }] }
 // 2件目以降は「ひとつ前の通知から after 後」。1件目の after は使わない
-const UNIT_MIN = { minute: 1, hour: 60, day: 1440 };
+// 各項目の予定時刻を配列で返す。開始日時が読めなければすべて null
 function groupTimes(start, steps) {
   const out = [];
   let t = parseLocal(start);
@@ -546,7 +574,12 @@ function groupTimes(start, steps) {
   });
   return out;
 }
-// 「9時から 千葉、東京、神奈川、長野 を30分おき」→ { due, items, every }
+// 保存しているグループのリマインダー（kind:'group'）用。spacing が 'equal' なら全項目 every、'each' なら項目ごとの after
+const stepAfter = (r, i) => (r.spacing === 'equal' ? r.every : r.steps[i].after) || { value: 0, unit: 'minute' };
+const stepTimes = r => groupTimes(r.due, r.steps.map((st, i) => ({ after: i ? stepAfter(r, i) : null })));
+// 項目の通知時刻。スヌーズ中ならスヌーズ先、そうでなければ予定時刻 t
+const stepAt = (st, t) => (st.snoozeUntil ? parseLocal(st.snoozeUntil) : t);
+// 「9時から 千葉、東京、神奈川、長野 を30分おき」→ { due, items, every, url }。2件未満なら null
 function parseGroup(raw, now = new Date()) {
   let s = normalize(raw);
   let every = null;
@@ -576,6 +609,7 @@ function cleanTitle(s) {
     .replace(/\s+/g, ' ').trim()
     .replace(/(?<=[\u3040-\u30ff\u4e00-\u9fff]) (?=[\u3040-\u30ff\u4e00-\u9fff])/g, '');
 }
+// 名前として使える文字列か（文字が2つ以上あり、数字ばかりではない）
 const wordy = s => (s.match(/[\p{L}]/gu) || []).length >= 2 && (s.match(/\d/g) || []).length <= s.length / 2;
 // 抽選・予約サイトでよく出る期日の種類。prio が小さいほど大事（候補の並びと最初の選択に使う）
 const DATE_KINDS = [
@@ -611,6 +645,8 @@ function normDateText(t) {
     // 「2026年10月30日」を「2026/10/30」と書く代わりに「2026年10/30」と書くもの
     .replace(/(20\d{2})年\s*(\d{1,2})\/(\d{1,2})/g, '$1/$2/$3');
 }
+// 文章から期日の候補を探し、日時順に最大20件返す。
+// 各候補は { due, title, src（元の行）, hasTime, deadline, past, kind, tag, prio }。opt.title は写真から推定した見出し
 function findDates(raw, now = new Date(), opt = {}) {
   let text = String(raw || '').normalize('NFKC').replace(/\r/g, '');
   // 写真の文字読み取りは字の間に空白が入りやすいので詰める

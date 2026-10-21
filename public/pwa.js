@@ -2,16 +2,19 @@
 // - 保存のたびに端末内の IndexedDB にも書く（Service Worker が通知の文面を作るため）
 // - 通知サーバーへ「鳴らす時刻」だけを送る
 // - 通知をタップしたときの操作画面
+// アプリ本体（app.html）の後に読み込み、S・save・render・toast などはアプリ側のものをそのまま使う
 (() => {
   const canPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-  const SIG_KEY = 'rimain.pushSig';
+  const SIG_KEY = 'rimain.pushSig'; // 最後にサーバーへ送った「宛先|時刻の列」。同じなら送り直さない
   let reg = null, syncTimer = null, lastSync = null, lastErr = '';
 
+  // VAPID 公開鍵（base64url）を PushManager.subscribe が受け取る形にする
   const u8 = s => { const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); };
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+  // 通知サーバーの API を呼ぶ。body があれば POST。失敗時はサーバーのエラー文で例外にする
   async function api(path, body) {
     const r = await fetch('/api/' + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
     const j = await r.json().catch(() => ({}));
@@ -34,6 +37,7 @@
       return res;
     } catch (e) { lastErr = e.message; throw e; }
   }
+  // 保存が続いたときにまとめて1回だけ送る
   const syncSoon = () => { clearTimeout(syncTimer); syncTimer = setTimeout(() => sync().catch(() => {}), 800); };
 
   window.rimainOnSave = state => {
@@ -48,13 +52,14 @@
     let changed = false;
     for (const f of RimainCore.fires(S)) {
       if (f.nag || !shown.has(f.key)) continue;
-      const r = S.reminders.find(x => x.id === f.id); if (!r) continue;
-      const k = f.key.slice(f.key.indexOf('@') + 1);
+      const r = findRem(f.id); if (!r) continue;
+      const k = f.key.slice(f.key.indexOf('@') + 1); // key の「@」の後ろが、その回の日時（lastNotified と同じ形）
       if (f.step != null) { const st = r.steps[f.step]; if (st && st.lastNotified !== k) { st.lastNotified = k; changed = true; } }
-      else if (r.lastNotified !== k) { r.lastNotified = k; r.lastNagAt = fmtLocal(new Date()) + ':' + pad(new Date().getSeconds()); r.nagCount = 0; changed = true; }
+      else if (r.lastNotified !== k) { r.lastNotified = k; r.lastNagAt = secStamp(new Date()); r.nagCount = 0; changed = true; }
     }
+    // すでに端末の通知で見せた回は、バナーの順番待ちからも外す
     for (let i = queue.length - 1; i >= 0; i--) {
-      const q = queue[i], r = S.reminders.find(x => x.id === q.id);
+      const q = queue[i], r = findRem(q.id);
       if (!r || q.test || q.act) continue;
       const k = q.step != null ? r.steps[q.step] && r.steps[q.step].lastNotified : r.lastNotified;
       if (k && shown.has(q.step != null ? `${r.id}:${q.step}@${k}` : `${r.id}@${k}`)) queue.splice(i, 1);
@@ -64,8 +69,9 @@
   }
 
   // ---- 通知をタップしたときの操作画面 ----
+  // id のリマインダー（stepRaw があればグループのその項目）について、URL を開く・完了・スヌーズ・コピーを出す
   function openAct(id, stepRaw) {
-    const r = S.reminders.find(x => x.id === id);
+    const r = findRem(id);
     if (!r) { toast('このリマインダーは見つかりませんでした（削除済みかもしれません）'); return; }
     const step = stepRaw === '' || stepRaw == null ? null : +stepRaw;
     const st = step != null ? r.steps && r.steps[step] : null;
@@ -93,16 +99,16 @@
         let msg = '';
         if (a === 'done') msg = st ? completeStep(r, step) : `「${r.title}」${completeRem(r)}`;
         else {
-          const d = new Date(); d.setSeconds(0, 0);
-          if (a === 'tomorrow') { d.setDate(d.getDate() + 1); d.setHours(8, 0); } else d.setMinutes(d.getMinutes() + +a);
-          if (st) { st.snoozeUntil = fmtLocal(d); st.lastNotified = null; }
-          else { r.snoozeUntil = fmtLocal(d); r.lastNotified = null; r.lastNagAt = null; }
-          save(); msg = `${fmtDue(d)} にもう一度お知らせします`;
+          // 「明日の朝」は翌日 8:00、それ以外は a 分後
+          let d;
+          if (a === 'tomorrow') { d = new Date(); d.setSeconds(0, 0); d.setDate(d.getDate() + 1); d.setHours(8, 0); } else d = minutesLater(+a);
+          msg = snoozeAt(r, st ? step : null, d);
         }
         closeSheet(); render(); toast(esc(msg));
       }));
     });
   }
+  // 操作画面と通知欄だけで使う見た目
   const css = document.createElement('style');
   css.textContent = `.act-sheet { gap: 12px; } .act-head { padding: 4px 4px 8px; } .act-title { font-size: 22px; font-weight: 700; line-height: 1.3; word-break: break-word; }
     .act-sub { color: var(--fg2); font-size: 15px; margin-top: 4px; } .act-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -112,6 +118,7 @@
   document.head.appendChild(css);
 
   // ---- 設定画面の「通知」欄 ----
+  // 状態（未対応・ホーム画面に未追加・拒否・オフ・オン）に合わせて欄を描き、ボタンに処理を付ける
   window.rimainPushUI = async box => {
     const draw = async () => {
       const perm = canPush ? Notification.permission : 'unsupported';
@@ -133,13 +140,14 @@
       } else {
         body = `<div class="f"><span class="lab">閉じている間の通知</span><span class="val">オン</span></div>
           <div class="f"><span class="lab">次の通知</span><span class="val">${next ? esc(fmtDue(new Date(next))) : 'なし'}</span></div>
-          <div class="f"><label for="pDirect">タップで URL を直接開く</label><input type="checkbox" class="switch" id="pDirect" ${S.settings && S.settings.tapOpensUrl ? 'checked' : ''}></div>
+          <div class="f"><label for="pDirect">タップで URL を直接開く</label><input type="checkbox" class="switch" id="pDirect" ${setting('tapOpensUrl') ? 'checked' : ''}></div>
           <button class="btn" id="pTest">テスト通知を送る</button><button class="btn" id="pResync">予定を送り直す</button><button class="btn danger" id="pOff">オフにする</button><div class="msg ${lastErr ? 'err' : ''}" id="pMsg">${lastErr ? esc('前回の同期に失敗: ' + lastErr) : ''}</div>`;
         foot = 'テスト通知はすぐ届きます。アプリを閉じて（ホーム画面に戻って）確かめてください。iPhone の通知にはボタンが付かないため、タップで開く画面で完了・スヌーズします。「タップで URL を直接開く」をオンにすると、URL があるときは操作画面を出さずに開きます。';
       }
       box.innerHTML = `<div class="fgroup-h">通知</div><div class="fgroup">${body}</div><div class="fgroup-f">${foot}</div>`;
       const g = id => box.querySelector('#' + id);
       const say = (t, cls = '') => { const m = g('pMsg'); if (m) { m.className = 'msg ' + cls; m.textContent = t; } };
+      // オンにする: 通知の許可 → サーバーの公開鍵で購読 → 予定を送る
       if (g('pOn')) g('pOn').onclick = async () => {
         try {
           const p = await Notification.requestPermission();
@@ -157,16 +165,18 @@
       if (g('pResync')) g('pResync').onclick = async () => {
         try { const r = await sync(true); say(`${r ? r.count : 0}件の予定を送りました`, 'ok'); } catch (e) { say('送れませんでした: ' + e.message, 'err'); }
       };
+      // オフにする: サーバー側の予定を消してから購読をやめる
       if (g('pOff')) g('pOff').onclick = async () => {
         try { const s2 = await getSub(); if (s2) { await api('clear', { sub: s2.toJSON() }).catch(() => {}); await s2.unsubscribe(); } lsSet(SIG_KEY, null); window.rimainPushOn = false; await draw(); }
         catch (e) { say('オフにできませんでした: ' + e.message, 'err'); }
       };
-      if (g('pDirect')) g('pDirect').onchange = e => { S.settings = { ...(S.settings || {}), tapOpensUrl: e.target.checked }; save(); };
+      if (g('pDirect')) g('pDirect').onchange = e => setSetting('tapOpensUrl', e.target.checked);
     };
     draw();
   };
 
   // ---- 起動 ----
+  // Service Worker が最新のデータで通知を作れるよう、まず今の状態を書いておく。通知から開いたとき（?act=）は操作画面を出す
   RimainCore.set('state', JSON.parse(JSON.stringify(S))).catch(() => {});
   const p = new URLSearchParams(location.search);
   if (p.get('act')) { const id = p.get('act'), st = p.get('step'); history.replaceState(null, '', location.pathname); setTimeout(() => openAct(id, st), 0); }

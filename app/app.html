@@ -533,10 +533,13 @@ html, :root.sheet-open body { background: #000; }
 </script>
 <script>
 // ===== UI =====
-const STORE_KEY = 'rimain.v1';
-const FORMAT = 'rimain.reminders';
+// 画面まわりのすべて。データは S（リストとリマインダー）にまとめて持ち、変えたら save() で保存して render() で描き直す。
+// 日時の計算と文章の解析は engine.js（上の /*ENGINE*/ に入る）、閉じている間の通知は pwa.js が受け持つ
+const STORE_KEY = 'rimain.v1';         // localStorage のキー
+const FORMAT = 'rimain.reminders';     // エクスポートするファイルの形式名
 const FORMAT_VERSION = 1;
-const COLORS = ['blue', 'red', 'orange', 'green', 'teal', 'purple', 'indigo', 'gray'];
+const COLORS = ['blue', 'red', 'orange', 'green', 'teal', 'purple', 'indigo', 'gray']; // リストの色（CSS 変数名）
+// アイコン（SVG）
 const I = {
   mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
   rep: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
@@ -551,9 +554,11 @@ const I = {
   link: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/></svg>',
 };
+// HTML に埋め込む文字列は必ず esc() を通す
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const $ = s => document.querySelector(s);
+// 入力された URL を http(s) の正しい形にする（「www.」や「example.com/…」には https:// を補う）。使えない URL は null
 function normUrl(u) {
   u = String(u || '').trim().replace(/&amp;/gi, '&'); if (!u) return null;
   if (/^www\./i.test(u)) u = 'https://' + u;
@@ -563,21 +568,30 @@ function normUrl(u) {
 const hostOf = u => { try { return new URL(u).host.replace(/^www\./, ''); } catch (e) { return u; } };
 
 // ---- 状態 ----
-let S = null;
-let view = { name: 'home' };
+let S = null;                // 全データ { format, version, lists, reminders, settings }
+let view = { name: 'home' }; // 今の画面。リスト画面は { name:'list', smart } か { name:'list', list }
 let searchQ = '';
+// localStorage に保存し、アプリ版では pwa.js に知らせる（IndexedDB への写しと通知サーバーへの同期）
 function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) {} try { window.rimainOnSave && window.rimainOnSave(S); } catch (e) {} }
+const findRem = id => S.reminders.find(x => x.id === id);
+// 設定（S.settings）の読み書き
+const setting = k => (S.settings || {})[k];
+function setSetting(k, v) { S.settings = { ...(S.settings || {}), [k]: v }; save(); }
 function load() { try { const t = localStorage.getItem(STORE_KEY); if (t) { const d = JSON.parse(t); if (d && Array.isArray(d.reminders)) return d; } } catch (e) {} return null; }
+// 単発・繰り返しのリマインダーの形。保存・エクスポートしたときのキーの並びもこの順になる
+const newReminder = fields => ({ id: uid(), title: 'リマインダー', notes: '', url: null, list: 'inbox', due: null, rule: null, nag: null,
+  flagged: false, priority: 0, done: false, doneAt: null, count: 0, history: [], input: '', createdAt: fmtLocal(new Date()), ...fields });
+// 話し言葉の1文からリマインダーを作る
 function makeReminder(text, listId, extra = {}) {
   const now = new Date();
   const p = parseInput(text, now);
-  return { id: uid(), title: p.title, notes: '', url: normUrl(p.url), list: listId, due: p.due ? fmtLocal(p.due) : null, rule: p.rule, nag: p.nag,
-    flagged: false, priority: 0, done: false, doneAt: null, count: 0, history: [], input: text, createdAt: fmtLocal(now), ...extra };
+  return newReminder({ title: p.title, url: normUrl(p.url), list: listId, due: p.due ? fmtLocal(p.due) : null, rule: p.rule, nag: p.nag, input: text, createdAt: fmtLocal(now), ...extra });
 }
 // 本番（ホーム画面のアプリ版）は空の状態から始める。サンプルは単体版と ?demo のときだけ
 const IS_PWA = !!window.RIMAIN_PWA;
 const wantsSample = () => !IS_PWA || /[?&]demo\b/.test(location.search);
 function emptyData() { return { format: FORMAT, version: FORMAT_VERSION, lists: [{ id: 'inbox', name: 'リマインダー', color: 'blue' }], reminders: [] }; }
+// 単体版・?demo 用のサンプルデータ
 function sample() {
   const lists = [
     { id: 'inbox', name: 'リマインダー', color: 'blue' },
@@ -608,20 +622,20 @@ function sample() {
 const listById = id => S.lists.find(l => l.id === id) || S.lists[0];
 const colorOf = rem => `var(--${listById(rem.list).color})`;
 const isGroup = r => r.kind === 'group';
-// グループ: 1件目は開始日時、2件目以降は「ひとつ前の通知から」の間隔
-const stepAfter = (r, i) => (r.spacing === 'equal' ? r.every : r.steps[i].after) || { value: 0, unit: 'minute' };
-const stepTimes = r => groupTimes(r.due, r.steps.map((st, i) => ({ after: i ? stepAfter(r, i) : null })));
+// グループ: 1件目は開始日時、2件目以降は「ひとつ前の通知から」の間隔（stepTimes・stepAt は engine.js）
 const stepUrl = (r, st) => (r.urlMode === 'each' ? normUrl(st.url) : r.urlMode === 'same' ? r.url : null);
+// まだ完了していない項目のうち、いちばん早く通知するもの { i, t, st }。なければ null
 function nextStep(r) {
   const ts = stepTimes(r); let best = null;
-  r.steps.forEach((st, i) => { if (st.done) return; const t = st.snoozeUntil ? parseLocal(st.snoozeUntil) : ts[i]; if (t && (!best || t < best.t)) best = { i, t, st }; });
+  r.steps.forEach((st, i) => { if (st.done) return; const t = stepAt(st, ts[i]); if (t && (!best || t < best.t)) best = { i, t, st }; });
   return best;
 }
+// 一覧に出す次の通知日時（スヌーズ中ならスヌーズ先、グループなら次の項目）
 const dueOf = rem => isGroup(rem) ? (nextStep(rem) || {}).t || null : parseLocal(rem.snoozeUntil || rem.due);
 const hm = d => d ? `${d.getHours()}:${pad(d.getMinutes())}` : '';
-const UNIT_JA = { minute: '分', hour: '時間', day: '日' };
 const endOfToday = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; };
 
+// ホームのスマートリスト（今日・日時設定あり など）。filter で中身を決める
 const SMART = {
   today: { name: '今日', color: 'blue', icon: I.today, filter: r => !r.done && dueOf(r) && dueOf(r) <= endOfToday() },
   scheduled: { name: '日時設定あり', color: 'red', icon: I.cal, filter: r => !r.done && r.due, grouped: true },
@@ -630,6 +644,7 @@ const SMART = {
   repeat: { name: '繰り返し', color: 'teal', icon: I.rep, filter: r => !r.done && r.rule },
   completed: { name: '完了済み', color: 'gray', icon: I.done, filter: r => r.done },
 };
+// 日時の早い順。日時なしは後ろにまとめ、その中では優先順位の高い順
 function sortRems(arr) {
   return arr.slice().sort((a, b) => {
     const da = dueOf(a), db = dueOf(b);
@@ -639,6 +654,7 @@ function sortRems(arr) {
 }
 
 // ---- 描画 ----
+// 今の view に合わせて画面全体を描き直す（ホーム or リスト）
 function render() {
   swOpen = null;
   const sc = $('#scroll');
@@ -687,6 +703,7 @@ function makeUnder() {
   moveUnder(u, 0, false);
   return u;
 }
+// 下に敷いた画面を、スワイプの進み具合 f（0〜1）に合わせて動かす
 function moveUnder(u, f, anim) {
   if (!u) return; const i = u.firstChild;
   i.style.transition = anim ? 'transform .24s cubic-bezier(.2,.8,.2,1), opacity .24s cubic-bezier(.2,.8,.2,1)' : 'none';
@@ -747,7 +764,7 @@ const BOUNCE_SEL = '.mic, .calbtn, .cal-q button, .cal-t button, .cal-r button, 
   document.addEventListener('pointercancel', () => release(false), { passive: true });
 })();
 // 行のスワイプ（右: 完了・左: 1時間後/フラグ/削除）。縦のスクロールと区別し、左端は「戻る」用に空けておく
-let swOpen = null, swClickBlock = 0;
+let swOpen = null, swClickBlock = 0; // swOpen: 左スワイプで操作ボタンを開いたままの行 / swClickBlock: スワイプを終えた時刻
 function closeSwipe(anim = true) {
   if (!swOpen) return; const { wrap, row } = swOpen; swOpen = null;
   row.classList.toggle('settle', anim); row.style.transform = '';
@@ -797,7 +814,7 @@ function closeSwipe(anim = true) {
   sc.addEventListener('click', e => { if (performance.now() - swClickBlock < 350 && !e.target.closest('.sw-btn')) { e.stopPropagation(); e.preventDefault(); } }, true);
   sc.addEventListener('click', e => {
     const b = e.target.closest('.sw-btn'); if (!b) return;
-    const wrap = b.closest('.swipe'); const r = S.reminders.find(x => x.id === wrap.dataset.sw); if (!r) return;
+    const wrap = b.closest('.swipe'); const r = findRem(wrap.dataset.sw); if (!r) return;
     const a = b.dataset.swa;
     if (a === 'flag') { r.flagged = !r.flagged; save(); swOpen = null; render(); toast(r.flagged ? `「${esc(r.title)}」にフラグを付けました` : 'フラグを外しました'); }
     else if (a === 'later') { const msg = snooze(r, 60); swOpen = null; render(); toast(esc(msg)); }
@@ -831,10 +848,11 @@ function celebrate(id) {
 // ホーム: 日付と大見出し、よく使う4つのタイル、その他は小さなチップ、リスト。説明文は最小限に
 function renderHome() {
   const now = new Date();
+  const count = k => S.reminders.filter(SMART[k].filter).length;
   const tile = k => { const m = SMART[k];
-    return `<button class="tile" data-smart="${k}" style="--c:var(--${m.color})"><span class="ic">${m.icon}</span><span class="num">${S.reminders.filter(m.filter).length}</span><span class="lbl">${m.name}</span></button>`; };
+    return `<button class="tile" data-smart="${k}" style="--c:var(--${m.color})"><span class="ic">${m.icon}</span><span class="num">${count(k)}</span><span class="lbl">${m.name}</span></button>`; };
   const pill = k => { const m = SMART[k];
-    return `<button class="pill" data-smart="${k}" style="--c:var(--${m.color})"><span class="pdot">${m.icon}</span>${m.name}<span class="pn">${S.reminders.filter(m.filter).length}</span></button>`; };
+    return `<button class="pill" data-smart="${k}" style="--c:var(--${m.color})"><span class="pdot">${m.icon}</span>${m.name}<span class="pn">${count(k)}</span></button>`; };
   const lists = S.lists.map(l => `<button class="lrow" data-list="${l.id}" style="--c:var(--${l.color})"><span class="dot">${I.list}</span><span class="name">${esc(l.name)}</span><span class="cnt">${S.reminders.filter(r => !r.done && r.list === l.id).length}</span>${I.chev}</button>`).join('');
   return `<div class="home-h"><div class="eyebrow">${now.getMonth() + 1}月${now.getDate()}日 ${WD[now.getDay()]}曜日</div><h1 class="large home-t">RE<span class="c">:</span>main</h1></div>
     <div class="search">${I.search}<input id="searchIn" type="search" placeholder="検索" aria-label="リマインダーを検索"></div>
@@ -844,6 +862,7 @@ function renderHome() {
     ${S.sampleData ? '<p class="hint">サンプルを表示中。右上の <b>フォルダ</b> から自分のデータを読み込めます。</p>' : ''}</div>
     <div id="searchBody" hidden></div>`;
 }
+// 検索欄に文字があれば、ホームの中身の代わりに結果を出す（タイトルとメモを対象に大文字小文字を区別せず探す）
 function renderSearchResults() {
   const hb = $('#homeBody'), sb = $('#searchBody');
   if (!hb) return;
@@ -853,6 +872,7 @@ function renderSearchResults() {
   const res = sortRems(S.reminders.filter(r => (r.title + ' ' + (r.notes || '')).toLowerCase().includes(q.toLowerCase())));
   sb.innerHTML = res.length ? `<div class="items">${res.map(rowHtml).join('')}</div>` : `<p class="empty">「${esc(q)}」に一致するリマインダーはありません</p>`;
 }
+// リスト画面。「日時設定あり」は日付ごとに見出しを付け、過ぎたものは「期限切れ」にまとめる
 function renderList() {
   const now = new Date();
   let rems, meta;
@@ -876,24 +896,33 @@ function renderList() {
   const extra = !view.smart ? `<p class="foot-note">完了済み ${doneCount}件 ・ <button class="navbtn" style="font-size:13px;min-height:0" id="editListBtn">リストを編集</button></p>` : '';
   return `<h1 class="large" style="color:${color}">${esc(meta.name)}</h1>${body}${extra}`;
 }
+// 行の下段に並べる小さな情報
+const doneSub = (r, now) => `<span>完了 ${esc(fmtDue(parseLocal(r.doneAt), now))}</span>`;
+const linkSub = url => `<a class="rlink" href="${esc(url)}" target="_blank" rel="noopener">${I.link}${esc(hostOf(url))}</a>`;
+const showListName = () => view.smart && view.smart !== 'completed'; // スマートリストでは所属リスト名も出す
+// 行の外枠（チェック・本文・フラグ）。main は本文ボタンの中身
+function rowFrame(r, checkLabel, main) {
+  return swipeWrap(r, `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
+    <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : checkLabel}"></button>
+    <button class="row-main" data-open="${r.id}">${main}${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
+    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`);
+}
+// 一覧の1行（単発・繰り返し）
 function rowHtml(r) {
   if (isGroup(r)) return groupRowHtml(r);
   const now = new Date();
   const d = dueOf(r);
   const subs = [];
-  if (r.done) subs.push(`<span>完了 ${esc(fmtDue(parseLocal(r.doneAt), now))}</span>`);
+  if (r.done) subs.push(doneSub(r, now));
   else if (d) subs.push(`<span class="${d < now ? 'over' : ''}">${esc(fmtDue(d, now))}</span>`);
   if (r.rule) subs.push(`<span class="rep">${I.rep}${esc(describeRule(r.rule).replace(/ \d{1,2}:\d{2}(・\d{1,2}:\d{2})*/, ''))}</span>`);
   if (r.nag && !r.done) subs.push(`<span class="badge">確実に ${r.nag.every}分</span>`);
   if (r.snoozeUntil && !r.done) subs.push(`<span class="badge snz">スヌーズ中</span>`);
-  if (r.url) subs.push(`<a class="rlink" href="${esc(r.url)}" target="_blank" rel="noopener">${I.link}${esc(hostOf(r.url))}</a>`);
-  if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
+  if (r.url) subs.push(linkSub(r.url));
+  if (showListName()) subs.push(`<span>${esc(listById(r.list).name)}</span>`);
   const pr = r.priority ? `<span class="prio">${'!'.repeat(r.priority)}</span>` : '';
-  return swipeWrap(r, `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
-    <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '完了にする'}"></button>
-    <button class="row-main" data-open="${r.id}"><div class="row-title">${pr}${esc(r.title)}</div>
-    ${subs.length ? `<div class="row-sub">${subs.join('')}</div>` : ''}${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
-    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`);
+  return rowFrame(r, '完了にする', `<div class="row-title">${pr}${esc(r.title)}</div>
+    ${subs.length ? `<div class="row-sub">${subs.join('')}</div>` : ''}`);
 }
 
 // スワイプで出す操作。ボタンでも同じことができる（詳細画面）ので、スワイプは近道
@@ -904,30 +933,30 @@ const SWI = {
   flag: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h2v18H5zM8 4h10l-2.5 4L18 12H8z"/></svg>',
   del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
 };
+// 行をスワイプ用の枠で包む（右へ引くと出る「完了」と、左へ引くと出る操作ボタン）
 function swipeWrap(r, rowHtml) {
   const btns = [!r.done && !isGroup(r) ? ['later', '1時間後', 'indigo'] : null, ['flag', r.flagged ? 'フラグ解除' : 'フラグ', 'orange'], ['del', '削除', 'red']].filter(Boolean);
   return `<div class="swipe" data-sw="${r.id}"><div class="sw-l" aria-hidden="true">${r.done ? SWI.undo + '未完了に戻す' : SWI.done + '完了'}</div>
     <div class="sw-r">${btns.map(([a, l, c]) => `<button class="sw-btn" data-swa="${a}" style="--c:var(--${c})" tabindex="-1">${SWI[a]}${l}</button>`).join('')}</div>${rowHtml}</div>`;
 }
+// グループの1行。次の項目と、項目ごとの時刻のチップ（最大6件）を出す
 function groupRowHtml(r) {
   const now = new Date();
   const ts = stepTimes(r), nx = nextStep(r);
   const doneN = r.steps.filter(x => x.done).length;
   const subs = [];
-  if (r.done) subs.push(`<span>完了 ${esc(fmtDue(parseLocal(r.doneAt), now))}</span>`);
+  if (r.done) subs.push(doneSub(r, now));
   else if (nx) subs.push(`<span class="${nx.t < now ? 'over' : ''}">次: ${esc(nx.st.title)} ${esc(fmtDue(nx.t, now))}</span>`);
   subs.push(`<span class="gbadge">グループ ${doneN}/${r.steps.length}</span>`);
-  if (r.urlMode === 'same' && r.url) subs.push(`<a class="rlink" href="${esc(r.url)}" target="_blank" rel="noopener">${I.link}${esc(hostOf(r.url))}</a>`);
+  if (r.urlMode === 'same' && r.url) subs.push(linkSub(r.url));
   if (r.urlMode === 'each') subs.push(`<span class="rep">${I.link}項目ごとのURL</span>`);
-  if (view.smart && view.smart !== 'completed') subs.push(`<span>${esc(listById(r.list).name)}</span>`);
+  if (showListName()) subs.push(`<span>${esc(listById(r.list).name)}</span>`);
   const MAX = 6;
   const chips = r.steps.slice(0, MAX).map((st, i) => `<span class="gs ${st.done ? 'done' : nx && nx.i === i ? 'next' : ''}">${esc(hm(ts[i]))} ${esc(st.title)}</span>`).join('') + (r.steps.length > MAX ? `<span class="gs">ほか${r.steps.length - MAX}件</span>` : '');
-  return swipeWrap(r, `<div class="row ${r.done ? 'done' : ''}" data-id="${r.id}" style="--c:${colorOf(r)}">
-    <button class="check" data-check="${r.id}" aria-label="${r.done ? '未完了に戻す' : '次の項目を完了にする'}"></button>
-    <button class="row-main" data-open="${r.id}"><div class="row-title">${esc(r.title)}</div>
-    <div class="row-sub">${subs.join('')}</div><div class="gsteps">${chips}</div>${r.notes ? `<div class="row-notes">${esc(r.notes)}</div>` : ''}</button>
-    ${r.flagged ? `<span class="flag">${I.flag}</span>` : ''}</div>`);
+  return rowFrame(r, '次の項目を完了にする', `<div class="row-title">${esc(r.title)}</div>
+    <div class="row-sub">${subs.join('')}</div><div class="gsteps">${chips}</div>`);
 }
+// グループの i 番目を完了にし、結果の文を返す。全部済んだらグループごと完了
 function completeStep(r, i) {
   const st = r.steps[i]; if (!st) return '';
   st.done = true; st.doneAt = fmtLocal(new Date()); st.snoozeUntil = null;
@@ -938,6 +967,7 @@ function completeStep(r, i) {
 }
 
 // ---- 完了・スヌーズ ----
+// 完了にする。繰り返しなら次回の日時に進め、終わりなら完了済みにする。トーストに出す文を返す
 function completeRem(r) {
   const now = new Date();
   r.history = r.history || [];
@@ -951,20 +981,26 @@ function completeRem(r) {
   r.done = true; r.doneAt = fmtLocal(now); save();
   return r.rule ? '繰り返しが終了しました' : '完了にしました';
 }
-function snooze(r, mins) {
-  const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() + mins);
-  r.snoozeUntil = fmtLocal(d); r.lastNotified = null; r.lastNagAt = null; save();
+// 今から mins 分後（秒は 0）
+const minutesLater = mins => { const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() + mins); return d; };
+// 日時 d にもう一度通知する。step を渡すとグループのその項目だけ。トーストに出す文を返す
+function snoozeAt(r, step, d) {
+  if (step != null) { const st = r.steps[step]; st.snoozeUntil = fmtLocal(d); st.lastNotified = null; }
+  else { r.snoozeUntil = fmtLocal(d); r.lastNotified = null; r.lastNagAt = null; }
+  save();
   return `${fmtDue(d)} にもう一度お知らせします`;
 }
+const snooze = (r, mins) => snoozeAt(r, null, minutesLater(mins));
 
 // ---- イベント ----
+// 画面全体のクリックをここでまとめて受ける（描き直しても付け直さなくて済むように）
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-smart],[data-list],[data-check],[data-open],#backBtn,#addListBtn,#editListBtn,#helpBtn,#dataBtn,.ex');
   if (!t) return;
   if (t.dataset.smart) navigate({ name: 'list', smart: t.dataset.smart }, 'fwd');
   else if (t.dataset.list) navigate({ name: 'list', list: t.dataset.list }, 'fwd');
   else if (t.dataset.check) {
-    const r = S.reminders.find(x => x.id === t.dataset.check); if (!r) return;
+    const r = findRem(t.dataset.check); if (!r) return;
     if (r.done) { r.done = false; r.doneAt = null; if (isGroup(r)) r.steps.forEach(x => { x.done = false; x.lastNotified = null; }); save(); render(); return; }
     t.classList.add('on');
     // 完了で一覧から消えるものは、チェックが描かれた後に右へ抜け、行の高さが縮んで詰まる
@@ -980,7 +1016,7 @@ document.addEventListener('click', e => {
     if (isGroup(r)) { setTimeout(() => { const nx = nextStep(r); if (nx) toast(esc(completeStep(r, nx.i))); render(); }, wait); return; }
     setTimeout(() => { const msg = completeRem(r); toast(`「${esc(r.title)}」${msg}`); render(); }, wait);
   }
-  else if (t.dataset.open) { const r = S.reminders.find(x => x.id === t.dataset.open); if (r && isGroup(r)) openGroupEditor(r.id); else openDetail(t.dataset.open); }
+  else if (t.dataset.open) { const r = findRem(t.dataset.open); if (r && isGroup(r)) openGroupEditor(r.id); else openDetail(t.dataset.open); }
   else if (t.id === 'backBtn') navigate({ name: 'home' }, 'back');
   else if (t.id === 'addListBtn') openListEditor(null);
   else if (t.id === 'editListBtn') openListEditor(view.list);
@@ -992,6 +1028,7 @@ document.addEventListener('click', e => {
 // ---- 自然文入力（リマインくん式） ----
 const EXAMPLES = ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', '隔週火曜 7:30 燃えないゴミ', '偶数日 7時 水やり', '毎日8時と20時 薬 確実に', '平日8時 出社 祝日除く', '毎月第2火曜10時 定例', '毎月末 家計簿', '毎月末 土日祝NG 18時 経費精算', '毎月25日 土日祝なら前の平日 給料日', '完了から1ヶ月後 歯ブラシ交換', '3日ごと 21時 ストレッチ', '寝る前に歯ブラシ持ってく'];
 $('#examples').innerHTML = EXAMPLES.map(x => `<button type="button" class="ex" data-ex="${esc(x)}">${esc(x)}</button>`).join('');
+// 解析結果を「いつ・繰り返し・確実に・URL・注意」のチップにする
 function interpretation(p, url) {
   const chips = [];
   url = url || normUrl(p.url);
@@ -1003,6 +1040,7 @@ function interpretation(p, url) {
   p.warn.forEach(w => chips.push(`<span class="chip w">${esc(w)}</span>`));
   return chips.join('');
 }
+// 入力中の文の解釈を入力欄の上に出す
 function updatePreview() {
   const v = $('#quick').value.trim();
   const pv = $('#preview');
@@ -1017,7 +1055,7 @@ function updatePreview() {
 }
 // 通知時間の候補。今日の時刻は過ぎたものを出さない
 function whenGroups(now = new Date()) {
-  const h = now.getHours(), WDN = '日月火水木金土';
+  const h = now.getHours();
   const today = [[12, '今日 12時'], [15, '今日 15時'], [18, '今日 18時'], [21, '今日 21時']].filter(([t]) => t > h).map(([, t]) => [t.replace('今日 ', '').replace('時', ':00'), t]);
   if (h < 23) today.splice(Math.max(0, today.length - 1), 0, ['今夜', '今夜']);
   const wk = [now.getDay() === 6 || now.getDay() === 0 ? null : ['週末', '週末 10時'], ['月曜 9:00', '月曜 9時'], ['金曜 18:00', '金曜 18時'], ['土曜 10:00', '土曜 10時']].filter(Boolean);
@@ -1026,10 +1064,11 @@ function whenGroups(now = new Date()) {
     ['すぐ', [['10分後', '10分後'], ['30分後', '30分後'], ['1時間後', '1時間後'], ['2時間後', '2時間後'], ['3時間後', '3時間後']]],
     ['今日', today],
     ['明日', [['7:00', '明日 朝7時'], ['8:00', '明日 朝8時'], ['9:00', '明日 9時'], ['12:00', '明日 12時'], ['18:00', '明日 18時'], ['21:00', '明日 21時']]],
-    ['今週・来週', wk.filter(([l]) => !l.startsWith(WDN[now.getDay()]))],
+    ['今週・来週', wk.filter(([l]) => !l.startsWith(WD[now.getDay()]))],
     ['くり返し', [['毎朝 7:00', '毎日 朝7時'], ['毎朝 8:00', '毎日 朝8時'], ['毎晩 21:00', '毎日 21時'], ['1日おき 8:00', '1日おき 8時'], ['2日おき 8:00', '2日おき 8時'], ['平日 8:00', '平日 8時'], ['毎週月曜 9:00', '毎週月曜 9時'], ['隔週月曜 9:00', '隔週月曜 9時'], ['毎月1日 9:00', '毎月1日 9時'], ['毎月末 9:00', '毎月末 9時'], ['月末の平日 9:00', '毎月末 土日祝NG 9時']]],
   ].filter(([, a]) => a.length);
 }
+// 候補をボタンの HTML にする。attr はボタンに付ける data 属性の名前（値は話し言葉の文）
 const whenChips = (attr, now) => whenGroups(now).map(([g, a]) => `<div class="wg"><span class="wg-h">${g}</span>${a.map(([l, t]) => `<button type="button" ${attr}="${esc(t)}">${esc(l)}</button>`).join('')}</div>`).join('');
 $('#quick').addEventListener('input', updatePreview);
 $('#quickUrl').addEventListener('input', () => { $('#linkBtn').classList.toggle('has', !!$('#quickUrl').value.trim()); updatePreview(); });
@@ -1062,8 +1101,9 @@ $('#qform').addEventListener('submit', e => {
     openWizard({ text: v, url: fieldUrl, listId, extra });
   }
 });
-const quickMode = () => !!(S.settings && S.settings.quickAdd);
+const quickMode = () => !!setting('quickAdd');
 function updateModeLbl() { $('#modeLbl').textContent = quickMode() ? 'すぐ登録モード' : ''; }
+// 登録した行を光らせ、「〇〇を登録しました」と取り消しボタンを出す
 function registeredToast(r) {
   celebrate(r.id);
   const when = r.due ? `次回は ${fmtDue(parseLocal(r.due))} です${r.rule ? `（↻ ${describeRule(r.rule)}）` : ''}` : '日時なしで追加しました';
@@ -1078,7 +1118,7 @@ $('#newBtn').addEventListener('click', () => {
 
 // ---- 会話で登録（リマインくん式 → 純正風の確認画面） ----
 // 1) 何をリマインドする？ 2) いつ？ 3) 開くURLは？ 4) 確認画面。答え済みの項目は聞かずに飛ばす
-let W = null;
+let W = null; // 会話の状態。step は 'what' → ('groupAsk') → 'when' → 'url' と進む
 const STEP_ORDER = ['what', 'when', 'url'];
 const whenText = (due, rule) => rule ? `${describeRule(rule)}（次回は${fmtDue(due)}）` : fmtDue(due);
 function openWizard(init) {
@@ -1096,6 +1136,7 @@ function openWizard(init) {
     if (init.text) setTimeout(() => wizardAnswer(init.text), 250);
   });
 }
+// 吹き出しを足す（bot = アプリの質問、me = ユーザーの答え）
 function wizardBot(text, sub) { W.log.push({ who: 'bot', text, sub }); drawChat(); }
 function wizardMe(text) { W.log.push({ who: 'me', text }); drawChat(); }
 function drawChat() {
@@ -1105,6 +1146,7 @@ function drawChat() {
     : `<div class="bub me ${i === W.log.length - 1 ? 'pop' : ''}"><div class="tx">${esc(m.text)}</div></div>`).join('');
   c.scrollTop = c.scrollHeight;
 }
+// 今の質問に合わせて、入力欄の種類と候補ボタンを入れ替える
 function wizardPrompt() {
   const inp = document.querySelector('#wIn'), chips = document.querySelector('#wChips'), next = document.querySelector('#wNext');
   if (!inp) return;
@@ -1126,6 +1168,7 @@ function wizardPrompt() {
   }
   setTimeout(() => inp.focus(), 50);
 }
+// 答えを受け取って次の質問へ進む。raw が '__' で始まるものは候補ボタンの合図（label はボタンの文字）
 function wizardAnswer(raw, label) {
   if (!W) return;
   const v = String(raw || '').trim();
@@ -1148,10 +1191,10 @@ function wizardAnswer(raw, label) {
   if (W.step === 'when') {
     if (raw === '__cal') return openCal(W.sugg && W.sugg.due, { repeat: true, future: true, onPick: ({ due, rule }) => {
       if (!W || W.step !== 'when') return;
-      wizardMe(whenText(due, rule)); W.due = due; W.rule = rule; wizardBot(`${whenText(due, rule)} ですね。`); askUrl();
+      acceptWhen(whenText(due, rule), due, rule);
     } });
     if (raw === '__none') { wizardMe('日時なし'); wizardBot('日時なしでリストに入れておきますね。'); W.due = null; W.rule = null; return askUrl(); }
-    if (raw === '__sugg' && W.sugg) { wizardMe(label || whenText(W.sugg.due, W.sugg.rule)); W.due = W.sugg.due; W.rule = W.sugg.rule; wizardBot(`${whenText(W.due, W.rule)} ですね。`); return askUrl(); }
+    if (raw === '__sugg' && W.sugg) return acceptWhen(label || whenText(W.sugg.due, W.sugg.rule), W.sugg.due, W.sugg.rule);
     if (!v) { wizardBot('いつ通知するか入力するか、下の候補を選んでください'); return; }
     wizardMe(label || v); W.inputs.push(v);
     const p = parseInput(v, now);
@@ -1162,14 +1205,24 @@ function wizardAnswer(raw, label) {
     return askUrl();
   }
   if (W.step === 'url') {
-    if (raw === '__surl' && W.surl) { wizardMe(W.surl); W.url = W.surl; wizardBot(`通知をタップすると ${hostOf(W.url)} を開くようにします。`); return finishWizard(); }
+    if (raw === '__surl' && W.surl) return acceptUrl(W.surl);
     if (!v) { wizardMe('なし'); W.url = null; return finishWizard(); }
     const u = normUrl(v);
     if (!u) { wizardMe(v); wizardBot('URL として読めませんでした。', 'https:// から始まる形で入力するか、「なし」を押してください'); return wizardPrompt(); }
-    wizardMe(u); W.url = u;
-    wizardBot(`通知をタップすると ${hostOf(u)} を開くようにします。`);
-    return finishWizard();
+    return acceptUrl(u);
   }
+}
+// 日時が決まった（候補・カレンダーから）→ URL の質問へ
+function acceptWhen(me, due, rule) {
+  wizardMe(me); W.due = due; W.rule = rule;
+  wizardBot(`${whenText(due, rule)} ですね。`);
+  askUrl();
+}
+// URL が決まった → 確認画面へ
+function acceptUrl(u) {
+  wizardMe(u); W.url = u;
+  wizardBot(`通知をタップすると ${hostOf(u)} を開くようにします。`);
+  finishWizard();
 }
 // 1つ目の答えに日時や URL が含まれていても質問は省略せず、次の質問の候補として出す
 function afterWhat(v, now) {
@@ -1186,16 +1239,18 @@ function askUrl() {
   wizardBot('通知をタップしたときに開く URL はありますか？', 'なければ「なし」を押してください');
   wizardPrompt();
 }
+// 集めた答えでリマインダーを作り、確認画面（詳細画面の新規モード）を開く
 function finishWizard() {
   wizardBot('最後に内容を確認してください。');
   const w = W;
   setTimeout(() => {
     if (W !== w) return;
-    const r = { id: uid(), title: w.title || 'リマインダー', notes: '', url: w.url, list: w.listId, due: w.due ? fmtLocal(w.due) : null, rule: w.rule, nag: w.nag,
-      flagged: false, priority: 0, done: false, doneAt: null, count: 0, history: [], input: w.inputs.join(' / '), createdAt: fmtLocal(new Date()), ...w.extra };
+    const r = newReminder({ title: w.title || 'リマインダー', url: w.url, list: w.listId, due: w.due ? fmtLocal(w.due) : null, rule: w.rule, nag: w.nag,
+      input: w.inputs.join(' / '), ...w.extra });
     openDetail(r, { isNew: true });
   }, 450);
 }
+// 確認画面で「戻る」を押したとき、それまでの会話を復元して URL の質問から続ける
 function openWizardFrom(w) {
   if (!w) return closeSheet();
   const keep = w;
@@ -1211,7 +1266,9 @@ function openWizardFrom(w) {
 // ホーム画面のアプリでは使えないことがあるので、そのときはキーボードのマイクを案内する
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 let voice = null;
+// 聞き取り中なら止める
 function stopVoice() { if (voice) try { voice.rec.stop(); } catch {} }
+// 入力欄 inp に向けて聞き取りを始める（聞き取り中にもう一度押すと止める）。btn はマイクボタン
 function startVoice(inp, btn) {
   if (voice) return stopVoice();
   const fallback = msg => { toast(esc(msg)); inp.focus(); };
@@ -1244,13 +1301,15 @@ document.addEventListener('click', e => {
 // ---- カレンダーで日時を選ぶ ----
 // よく使う日・月のカレンダー・よく使う時刻から選ぶ。結果は話し言葉と同じ書き方の文（例「10月28日から毎週水曜 9:00」）にして
 // パーサーに通すので、繰り返しの計算は文章で登録したときと同じになる
-let CAL = null;
+let CAL = null; // カレンダーの状態 { d: 選んだ日時, y/m: 表示中の年月, rep: 繰り返し, opt }
+// 選んだ日時を話し言葉の文にする
 function calText(c) {
   const d = c.d, now = new Date();
   const day = `${d.getFullYear() !== now.getFullYear() ? d.getFullYear() + '年' : ''}${d.getMonth() + 1}月${d.getDate()}日`;
   const rep = { day: '毎日', week: `毎週${WD[d.getDay()]}曜`, month: `毎月${d.getDate()}日` }[c.rep];
   return rep ? `${day}から${rep} ${hm(d)}` : `${day} ${hm(d)}`;
 }
+// カレンダーを開く。init は最初に選んでおく日時。opt: { repeat: 繰り返しも選べる, future: 過去は選べない, title, onPick }
 function openCal(init, opt = {}) {
   const now = new Date();
   let d = init instanceof Date && !isNaN(init) ? new Date(init) : null;
@@ -1282,6 +1341,7 @@ function openCal(init, opt = {}) {
   });
   drawCal();
 }
+// 選んでいる日時の要約・よく使う日・月のカレンダー・時刻・繰り返しを描く
 function drawCal() {
   const c = CAL, B = document.querySelector('#calB'); if (!c || !B) return;
   const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1314,6 +1374,7 @@ function drawCal() {
     <div class="cal-note">点のある日は、ほかの予定が入っています</div>`;
   const ok = document.querySelector('#calWrap [data-c="ok"]'); if (ok) ok.disabled = !!(c.opt.future && past && c.rep === 'none');
 }
+// 「完了」: 繰り返しを選んでいればパーサーに通してルールを作り、onPick に渡す
 function pickCal() {
   const c = CAL; if (!c) return;
   let due = new Date(c.d), rule = null;
@@ -1356,7 +1417,9 @@ $('#calBtn').addEventListener('click', () => {
 // 読み取り用のファイル（約6MB）は初めて使うときだけ、このアプリと同じ場所から読み込む
 const OCR_BASE = new URL('ocr/', location.href).href;
 let ocrWorker = null;
+// script タグを足して読み込む
 function loadScript(src) { return new Promise((ok, ng) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => ng(new Error('load')); document.head.appendChild(el); }); }
+// 文字読み取りの準備（初回だけ）。onProgress には読み込みと読み取りの進み具合が届く
 async function getOcr(onProgress) {
   if (ocrWorker) return ocrWorker;
   if (!window.Tesseract) await loadScript(OCR_BASE + 'tesseract.min.js');
@@ -1386,7 +1449,7 @@ function photoHeading(data) {
   const big = lines.filter(l => l.conf >= 50 && /[\u3040-\u30ff\u4e00-\u9fff]{2,}/.test(l.text) && !findDates(l.text).length).sort((a, b) => b.h - a.h)[0];
   return big && big.h >= median * 1.3 ? big.text.slice(0, 30) : '';
 }
-let SC = null;
+let SC = null; // 読み取り画面の状態 { cands: 候補, sel: 選んだ候補の番号, titles: 書き換えた名前, url, hint: 写真の見出し, page*: ページ読み込み }
 function openScan() {
   SC = { cands: [], sel: new Set(), titles: {}, url: null, hint: '' };
   const ICAM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
@@ -1419,6 +1482,7 @@ function openScan() {
     out.addEventListener('input', e => { if (e.target.dataset.ti != null) SC.titles[e.target.dataset.ti] = e.target.value; });
   });
 }
+// 写真を読み取り、読めた文字を文章欄に入れて期日を探す
 async function scanPhoto(f) {
   const box = $('#scImg'), st = $('#scSt'), bar = $('#scBar'); if (!box) return;
   box.hidden = false; $('#scThumb').src = URL.createObjectURL(f);
@@ -1443,6 +1507,7 @@ async function scanPhoto(f) {
     set('読み取れませんでした。通信できる場所で一度開くか、文章を貼り付けてください', 0);
   }
 }
+// 文章欄から期日の候補を探し直す。前に選んでいた候補は選んだままにする
 function scanText() {
   if (!SC) return;
   const text = $('#scText').value;
@@ -1464,7 +1529,7 @@ function scanText() {
   drawScan();
 }
 // URL のページをサーバー経由で取り寄せ、本文と予定の情報を文章欄に足す（設定でオンにした人だけ）
-const pageMode = () => !!(S.settings && S.settings.pageFetch);
+const pageMode = () => !!setting('pageFetch');
 async function readPage() {
   if (!SC || !SC.url || SC.loading) return;
   const target = SC.url; SC.loading = true; SC.pageMsg = ''; drawScan();
@@ -1489,12 +1554,14 @@ async function readPage() {
     SC.pageFail = e.fallback ? target : ''; drawScan();
   }
 }
+// 取り寄せたページのバイト列を文字にする
 function decodePage(bytes, type) {
   // 日本のサイトは Shift_JIS や EUC-JP のこともあるので、文字コードを見て読む
   let cs = (type.match(/charset=["']?([\w-]+)/i) || [])[1];
   if (!cs) { const head = new TextDecoder('ascii').decode(bytes.subarray(0, 4096)); cs = (head.match(/<meta[^>]+charset=["']?([\w-]+)/i) || [])[1]; }
   try { return new TextDecoder(cs || 'utf-8').decode(bytes); } catch (e) { return new TextDecoder('utf-8').decode(bytes); }
 }
+// ページの HTML から、タイトルと本文の行（構造化データのイベント日時を先頭に）を取り出す
 function pageToText(html) {
   // DOMParser はスクリプトを実行しないので、取り寄せたページを安全に読める
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -1529,6 +1596,7 @@ function pageToText(html) {
   }
   return { title, text: [...ev, ...lines].join('\n') };
 }
+// 見つけた候補の一覧と登録ボタンを描く
 function drawScan() {
   const out = $('#scOut'); if (!out || !SC) return;
   const text = $('#scText').value.trim();
@@ -1546,14 +1614,14 @@ function drawScan() {
     ${SC.url ? `<div class="fgroup-f">通知をタップすると ${esc(hostOf(SC.url))} を開きます</div>` : ''}${pg}
     <div style="margin-top:14px"><button type="button" class="sc-go" id="scGo" style="width:100%" ${n ? '' : 'disabled'}>${n ? (n === 1 ? '確認へ進む' : `${n}件を登録`) : '登録する期日を選んでください'}</button></div>`;
 }
+// 選んだ候補を登録する。1件なら確認画面へ、2件以上ならまとめて登録
 function scanRegister() {
   if (!SC || !SC.sel.size) return;
   const listId = view.list || 'inbox', now = new Date();
   const rs = [...SC.sel].sort((a, b) => a - b).map(i => {
     const c = SC.cands[i], title = (SC.titles[i] ?? c.title).trim() || 'リマインダー';
     const notes = c.what && c.what !== title ? `${c.tag || c.what}: ${c.src}` : c.tag ? `${c.tag}: ${c.src}` : c.src;
-    return { id: uid(), title, notes, url: SC.url, list: listId, due: fmtLocal(c.due), rule: null, nag: null,
-      flagged: view.smart === 'flagged', priority: 0, done: false, doneAt: null, count: 0, history: [], input: c.src, createdAt: fmtLocal(now) };
+    return newReminder({ title, notes, url: SC.url, list: listId, due: fmtLocal(c.due), flagged: view.smart === 'flagged', input: c.src, createdAt: fmtLocal(now) });
   });
   SC = null;
   if (rs.length === 1) return openDetail(rs[0], { isNew: true });
@@ -1563,12 +1631,14 @@ function scanRegister() {
 $('#scanBtn').addEventListener('click', () => openScan());
 
 // ---- トースト ----
+// 画面下の短いお知らせ。「取り消す」ボタン（data-undo: 登録の取り消し / data-restore: 削除の取り消し）を含められる
 let toastTimer;
 $('#toast').addEventListener('click', e => {
   if (e.target.closest('[data-restore]') && deleted) { S.reminders.splice(Math.min(deleted.idx, S.reminders.length), 0, deleted.r); const id = deleted.r.id; deleted = null; save(); render(); celebrate(id); toast('元に戻しました'); return; }
   const b = e.target.closest('[data-undo]'); if (!b) return;
   S.reminders = S.reminders.filter(x => x.id !== b.dataset.undo); save(); render(); toast('取り消しました');
 });
+// html は esc 済みの文字列を渡す
 function toast(html, ms = 2600) {
   const t = $('#toast'); t.innerHTML = html;
   if (t.hidden || t.classList.contains('out')) { t.classList.remove('out'); t.hidden = false; t.style.animation = 'none'; t.offsetHeight; t.style.animation = ''; }
@@ -1580,6 +1650,7 @@ function toast(html, ms = 2600) {
 // ---- シート共通 ----
 // 開くときは下からばねで、閉じるときは短く落とす。閉じる途中で別のシートを開いたら、閉じる処理は取り消す
 let sheetCloseT = null;
+// 下から出るシートを開く。onMount(シート要素) で中身にイベントを付ける
 function openSheet(html, onMount) {
   const w = $('#sheetWrap'), s = $('#sheet');
   if (sheetCloseT) { clearTimeout(sheetCloseT); sheetCloseT = null; w.classList.remove('closing'); s.classList.remove('tall'); s.style.transform = ''; s.style.animation = 'none'; s.offsetHeight; s.style.animation = ''; }
@@ -1638,6 +1709,7 @@ function closeSheet() {
   document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheetWrap').hidden) closeSheet(); });
+// シートの見出し（左右のボタンは data-act="cancel" / "ok"）。ボタンの文字を空にすると出さない
 const sheetHead = (title, right = '完了', left = 'キャンセル') => `<div class="sheet-h gut">${left ? `<button class="navbtn" data-act="cancel">${left}</button>` : '<span></span>'}<div class="t">${title}</div>${right ? `<button class="navbtn r" data-act="ok">${right}</button>` : '<span></span>'}</div>`;
 
 // ---- 詳細編集 ----
@@ -1653,6 +1725,7 @@ function ivLabel(kind, n) {
     default: return String(n);
   }
 }
+// 間隔の <option> 一覧。今の値が上限より大きくても選べるように足す
 function ivOptions(kind, cur) {
   const max = { daily: 30, weekly: 12, monthly: 12, monthlyNth: 12, yearly: 10, hourly: 24, minutely: 60 }[kind] || 60;
   const ns = Array.from({ length: max }, (_, i) => i + 1); if (cur > max) ns.push(cur);
@@ -1660,7 +1733,9 @@ function ivOptions(kind, cur) {
 }
 // ---- 詳細条件の組み立て画面（AND / OR / もし〜なら） ----
 const COND_TYPES = [['day', '日の種類'], ['wd', '曜日'], ['mday', '日付の範囲'], ['last', '月末'], ['nth', '第N曜日'], ['month', '月'], ['parity', '偶数日・奇数日'], ['period', '期間']];
+// 条件の種類を選んだときの初期値
 const condDefault = t => ({ day: { v: 'bizday' }, wd: { v: [1] }, mday: { from: 1, to: 10 }, last: { n: 1 }, nth: { n: 1, wd: 1 }, month: { v: [new Date().getMonth() + 1] }, parity: { v: 'even' }, period: { from: ymd(new Date()), to: '' } }[t]);
+// 条件1つ分の入力欄。p は adv の中の場所を表す道筋（'c.0' = 1つ目の条件、'c.1.0' = 2つ目のグループの1つ目、'i.0.cond' = 1つ目の「もし」）
 function condEditor(c, p) {
   const o = (v, l, cur) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${l}</option>`;
   const sel = (k, opts, cur) => `<select data-p="${p}" data-k="${k}">${opts.map(([v, l]) => o(v, l, cur)).join('')}</select>`;
@@ -1679,7 +1754,9 @@ function condEditor(c, p) {
   }
   return `${sel('t', COND_TYPES, c.t)}${ed}${sel('not', [['', 'のとき'], ['1', '以外のとき']], c.not ? '1' : '')}`;
 }
+// 詳細条件の画面を box に描き、操作のたびに adv（{ cond, ifs }）を書き換えて onChange を呼ぶ
 function advBuilder(box, adv, onChange) {
+  // 道筋 p をたどって adv の中の条件オブジェクトを返す
   const at = p => p.split('.').reduce((o, k) => (k === 'c' ? adv.cond : k === 'i' ? adv.ifs : Array.isArray(o) ? o[+k] : o.items ? o.items[+k] : o.cond && k === 'cond' ? o.cond : o[k]), null);
   const seg = (p, op) => `<div class="seg" role="group"><button type="button" data-op="${p}" data-v="and" aria-pressed="${op !== 'or'}">すべて満たす（AND）</button><button type="button" data-op="${p}" data-v="or" aria-pressed="${op === 'or'}">どれか1つ（OR）</button></div>`;
   const draw = () => {
@@ -1727,11 +1804,13 @@ function advBuilder(box, adv, onChange) {
   });
   draw();
 }
+// 詳細画面の「繰り返し」欄の値。月ごとは日付指定と第N曜日を分ける
 function ruleKind(r) {
   if (!r) return 'none';
   if (r.freq === 'monthly') return r.byNth ? 'monthlyNth' : 'monthly';
   return r.freq;
 }
+// 詳細画面。id はリマインダーの id か、まだ登録していないリマインダーそのもの（opts.isNew のとき、確認画面として使う）
 function openDetail(id, opts = {}) {
   const isNew = !!opts.isNew;
   const r = typeof id === 'object' ? id : S.reminders.find(x => x.id === id); if (!r) return;
@@ -1799,6 +1878,7 @@ function openDetail(id, opts = {}) {
     const g = id => sh.querySelector('#' + id);
     advBuilder(g('dAdv'), adv, () => refresh(true));
     const pressed = name => [...sh.querySelectorAll(`[data-wd="${name}"][aria-pressed="true"]`)].map(b => +b.dataset.v);
+    // 画面の入力から繰り返しルールを組み立てる（「しない」なら null）
     const buildRule = () => {
       const kind = g('dKind').value;
       if (kind === 'none') return null;
@@ -1829,6 +1909,7 @@ function openDetail(id, opts = {}) {
       if (+g('dCount').value > 0) nr.count = +g('dCount').value;
       return nr;
     };
+    // 入力が変わったら、出す欄の切り替え・ルールの説明・今後の予定を更新する。recalcDue なら次の通知日時もルールに合わせて直す
     const refresh = (recalcDue) => {
       const kind = g('dKind').value;
       sh.querySelectorAll('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(' ').includes(kind); });
@@ -1887,6 +1968,7 @@ function openDetail(id, opts = {}) {
     });
     refresh(false);
     sh.querySelector('[data-act="cancel"]').onclick = isNew ? () => openWizardFrom(W) : closeSheet;
+    // 「完了」「登録」: 入力を r に書き戻して保存する
     const commit = () => {
       r.title = g('dTitle').value.trim() || r.title;
       r.notes = g('dNotes').value.trim();
@@ -1911,9 +1993,10 @@ function openDetail(id, opts = {}) {
 }
 
 // ---- グループ編集（時間差で順番に通知するリスト） ----
-function nextHour() { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); return d; }
+// グループの作成・編集画面。編集は複製 G に対して行い、保存したときだけ元と入れ替える。
+// opts: { prefill: parseGroup の結果, listId, extra }
 function openGroupEditor(id, opts = {}) {
-  const orig = id ? S.reminders.find(x => x.id === id) : null;
+  const orig = id ? findRem(id) : null;
   const isNew = !orig;
   const G = orig ? JSON.parse(JSON.stringify(orig)) : {
     id: uid(), kind: 'group', title: '', notes: '', list: opts.listId || view.list || 'inbox', due: fmtLocal(nextHour()),
@@ -1921,6 +2004,7 @@ function openGroupEditor(id, opts = {}) {
     steps: [{ id: uid(), title: '', after: { value: 30, unit: 'minute' } }, { id: uid(), title: '', after: { value: 30, unit: 'minute' } }],
     flagged: false, priority: 0, done: false, doneAt: null, history: [], createdAt: fmtLocal(new Date()), ...(opts.extra || {}),
   };
+  // parseGroup の結果を G に反映する
   const applyParsed = g => {
     G.steps = g.items.map(t => ({ id: uid(), title: t, after: { ...(g.every || G.every) } }));
     if (g.every) { G.every = { ...g.every }; G.spacing = 'equal'; }
@@ -1928,7 +2012,7 @@ function openGroupEditor(id, opts = {}) {
     if (g.url) { G.urlMode = 'same'; G.url = normUrl(g.url); }
   };
   if (opts.prefill) applyParsed(opts.prefill);
-  const unitSel = (cls, cur, i) => `<select ${cls} ${i != null ? `data-i="${i}"` : ''}>${['minute', 'hour', 'day'].map(u => `<option value="${u}" ${cur === u ? 'selected' : ''}>${UNIT_JA[u]}</option>`).join('')}</select>`;
+  const unitSel = (cls, cur, i) => `<select ${cls} ${i != null ? `data-i="${i}"` : ''}>${['minute', 'hour', 'day'].map(u => `<option value="${u}" ${cur === u ? 'selected' : ''}>${UNIT_LABEL[u]}</option>`).join('')}</select>`;
   const body = () => {
     const ts = stepTimes(G);
     return `
@@ -1973,6 +2057,7 @@ function openGroupEditor(id, opts = {}) {
     const B = sh.querySelector('#gBody');
     const g = id => sh.querySelector('#' + id);
     const draw = () => { const y = B.scrollTop; B.innerHTML = body(); B.scrollTop = y; refreshTimes(); };
+    // 描き直さずに、各項目の時刻と要約の文だけを更新する（入力中のフォーカスを保つため）
     const refreshTimes = () => {
       const ts = stepTimes(G);
       G.steps.forEach((_, i) => { const el = g('gt' + i); if (el) el.textContent = ts[i] ? fmtDue(ts[i]) : ''; });
@@ -2016,7 +2101,7 @@ function openGroupEditor(id, opts = {}) {
         const p = parseGroup(g('gNl').value);
         if (!p) { g('gNlMsg').textContent = '2件以上を「、」で区切って書いてください。例: 9時から 千葉、東京、神奈川 を30分おき'; g('gNlMsg').style.color = 'var(--red)'; return; }
         applyParsed(p); if (!G.title) G.title = ''; draw();
-        g('gNlMsg').style.color = ''; g('gNlMsg').textContent = `${p.items.length}件に分けました${p.every ? `（${p.every.value}${UNIT_JA[p.every.unit]}おき）` : ''}${p.due ? '' : '。最初の通知の日時を確認してください'}`;
+        g('gNlMsg').style.color = ''; g('gNlMsg').textContent = `${p.items.length}件に分けました${p.every ? `（${p.every.value}${UNIT_LABEL[p.every.unit]}おき）` : ''}${p.due ? '' : '。最初の通知の日時を確認してください'}`;
       }
       else if (t.id === 'gTest') { closeSheet(); const nx = nextStep(orig); if (nx) notify(orig, true, nx.i); }
       else if (t.id === 'gAllDone') { orig.steps.forEach(x => { x.done = true; }); orig.done = true; orig.doneAt = fmtLocal(new Date()); save(); closeSheet(); render(); toast(`「${esc(orig.title)}」をすべて完了にしました`); }
@@ -2024,6 +2109,7 @@ function openGroupEditor(id, opts = {}) {
       else if (t.id === 'gDelYes') { S.reminders = S.reminders.filter(x => x.id !== orig.id); save(); closeSheet(); render(); toast(`グループ「${esc(orig.title)}」を削除しました`); }
       else if (t.id === 'gRegister') commit();
     });
+    // 入力を確かめてから登録・保存する
     const commit = () => {
       const err = m => { g('gErr').textContent = m; g('gErr').scrollIntoView({ block: 'center' }); };
       G.steps = G.steps.filter(x => String(x.title).trim());
@@ -2063,6 +2149,7 @@ document.addEventListener('change', e => {
   const row = sel.closest('.f').nextElementSibling; row.hidden = false; row.querySelector('input').focus();
 }, true);
 document.addEventListener('focusin', e => { const sel = e.target.closest('select[data-listsel]'); if (sel && sel.value !== '__new') sel.dataset.cur = sel.value; });
+// 「新しいリスト」の欄からリストを作り、その選択欄で選んだ状態にする
 function createListFrom(row) {
   const inp = row.querySelector('input'), name = inp.value.trim(); if (!name) { inp.focus(); return; }
   const used = S.lists.map(l => l.color), color = COLORS.find(c => !used.includes(c)) || COLORS[S.lists.length % COLORS.length];
@@ -2075,6 +2162,7 @@ function createListFrom(row) {
 }
 document.addEventListener('click', e => { const b = e.target.closest('.newlist .nl-ok'); if (b) createListFrom(b.closest('.newlist')); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.target.closest('.newlist input')) { e.preventDefault(); createListFrom(e.target.closest('.newlist')); } });
+// リストの作成・編集画面（listId が null なら新規）
 function openListEditor(listId) {
   const l = listId ? listById(listId) : { id: null, name: '', color: 'green' };
   let color = l.color;
@@ -2103,10 +2191,12 @@ function openListEditor(listId) {
 }
 
 // ---- ファイル入出力 ----
+// エクスポートする内容。通知の途中経過（lastNotified など）は端末ごとのものなので含めない
 function exportObj() {
   return { format: FORMAT, version: FORMAT_VERSION, exportedAt: fmtLocal(new Date()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
     lists: S.lists, reminders: S.reminders.map(({ lastNotified, lastNagAt, nagCount, ...r }) => (isGroup(r) ? { ...r, steps: r.steps.map(({ lastNotified, snoozeUntil, ...st }) => st) } : r)) };
 }
+// 読み込んだ JSON を確かめ、足りない項目を補った { lists, reminders } にする。おかしなところがあれば日本語のエラーを投げる
 function validateImport(d) {
   if (!d || typeof d !== 'object') throw new Error('JSON の形式ではありません');
   if (d.format && d.format !== FORMAT) throw new Error(`format が "${d.format}" です。"${FORMAT}" のファイルを選んでください`);
@@ -2131,6 +2221,7 @@ function validateImport(d) {
   });
   return { lists, reminders };
 }
+// 取り込む。mode が 'replace' なら置き換え、それ以外は今のデータに追加（id が重なれば振り直す）。取り込んだ件数を返す
 function applyImport(d, mode) {
   const v = validateImport(d);
   if (mode === 'replace') { S = { format: FORMAT, version: FORMAT_VERSION, lists: v.lists, reminders: v.reminders }; }
@@ -2143,6 +2234,7 @@ function applyImport(d, mode) {
   save(); render();
   return v.reminders.length;
 }
+// 「ファイルと設定」画面
 function openData() {
   const json = JSON.stringify(exportObj(), null, 2);
   let mode = 'merge';
@@ -2162,7 +2254,7 @@ function openData() {
       <div class="msg" id="iMsg"></div>
     </div></div>
     <div><div class="fgroup-h">通知音</div><div class="fgroup">
-      <div class="f"><label for="sSound">アプリを開いているとき</label><select id="sSound">${Object.entries(SOUNDS).map(([k, v]) => `<option value="${k}" ${((S.settings && S.settings.sound) || 'chime') === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></div>
+      <div class="f"><label for="sSound">アプリを開いているとき</label><select id="sSound">${Object.entries(SOUNDS).map(([k, v]) => `<option value="${k}" ${(setting('sound') || 'chime') === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></div>
       <button class="btn" id="sPlay">試しに鳴らす</button>
     </div><div class="fgroup-f">アプリを閉じている間に届く通知は、iPhone の標準の通知音で鳴ります。Web アプリからは通知音を変えられない仕組みのためです（音のオン・オフは 設定アプリ →「通知」→「RE:main」で変えられます）。</div></div>
     <div><div class="fgroup-h">通知を開いたとき</div><div class="fgroup">
@@ -2185,34 +2277,37 @@ function openData() {
   </div>`;
   openSheet(html, sh => {
     const g = id => sh.querySelector('#' + id);
+    // 欄の下のメッセージ（cls: 'ok' / 'err' / なし）
+    const say = (id, text, cls) => { g(id).className = cls ? 'msg ' + cls : 'msg'; g(id).textContent = text; };
     sh.querySelector('[data-act="ok"]').onclick = closeSheet;
     g('xDl').onclick = async () => {
       const filename = `rimain-${ymd(new Date()).replace(/-/g, '')}.json`;
       // claude.ai 上では downloads 機能で保存、単体の HTML ではブラウザのダウンロードを使う
       const dl = window.claude && window.claude.use ? await window.claude.use('downloads').catch(() => null) : null;
       if (dl) {
-        try { await dl.save({ filename, data: json }); g('xMsg').className = 'msg ok'; g('xMsg').textContent = `${filename} を保存しました`; }
-        catch (e) { g('xMsg').className = e.code === 'declined' ? 'msg' : 'msg err'; g('xMsg').textContent = e.code === 'declined' ? '保存をキャンセルしました' : 'ここでは保存できませんでした。「JSON をコピー」を使ってください。'; }
+        try { await dl.save({ filename, data: json }); say('xMsg', `${filename} を保存しました`, 'ok'); }
+        catch (e) { if (e.code === 'declined') say('xMsg', '保存をキャンセルしました'); else say('xMsg', 'ここでは保存できませんでした。「JSON をコピー」を使ってください。', 'err'); }
         return;
       }
       try {
         const blob = new Blob([json], { type: 'application/json' });
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob); a.download = `rimain-${ymd(new Date()).replace(/-/g, '')}.json`;
+        a.href = URL.createObjectURL(blob); a.download = filename;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-        g('xMsg').className = 'msg ok'; g('xMsg').textContent = '保存を開始しました。保存されない場合は「JSON をコピー」を使ってください。';
-      } catch (e) { g('xMsg').className = 'msg err'; g('xMsg').textContent = 'この環境ではファイル保存ができません。「JSON をコピー」を使ってください。'; }
+        say('xMsg', '保存を開始しました。保存されない場合は「JSON をコピー」を使ってください。', 'ok');
+      } catch (e) { say('xMsg', 'この環境ではファイル保存ができません。「JSON をコピー」を使ってください。', 'err'); }
     };
     g('xCopy').onclick = () => {
-      const ok = () => { g('xMsg').className = 'msg ok'; g('xMsg').textContent = 'コピーしました'; };
-      const fallback = () => { const t = g('xTxt'); t.focus(); t.select(); g('xMsg').className = 'msg'; g('xMsg').textContent = '下のテキストを選択しました。コピーしてください。'; };
+      const ok = () => say('xMsg', 'コピーしました', 'ok');
+      // クリップボードが使えないときは、テキストを選択して手でコピーしてもらう
+      const fallback = () => { const t = g('xTxt'); t.focus(); t.select(); say('xMsg', '下のテキストを選択しました。コピーしてください。'); };
       try { navigator.clipboard.writeText(json).then(ok, fallback); } catch (e) { fallback(); }
     };
     sh.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { mode = b.dataset.mode; sh.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
     const doImport = text => {
-      try { const n = applyImport(JSON.parse(text), mode); g('iMsg').className = 'msg ok'; g('iMsg').textContent = `${n}件を${mode === 'replace' ? '置き換えて' : '追加して'}取り込みました`; }
-      catch (e) { g('iMsg').className = 'msg err'; g('iMsg').textContent = e instanceof SyntaxError ? 'JSON として読めませんでした。括弧やカンマを確認してください' : e.message; }
+      try { const n = applyImport(JSON.parse(text), mode); say('iMsg', `${n}件を${mode === 'replace' ? '置き換えて' : '追加して'}取り込みました`, 'ok'); }
+      catch (e) { say('iMsg', e instanceof SyntaxError ? 'JSON として読めませんでした。括弧やカンマを確認してください' : e.message, 'err'); }
     };
     g('iFile').onchange = e => { const f = e.target.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => doImport(String(fr.result)); fr.readAsText(f); };
     g('iGo').onclick = () => { const t = g('iTxt').value.trim(); if (t) doImport(t); };
@@ -2221,17 +2316,18 @@ function openData() {
       try { const p = await Notification.requestPermission(); g('nState').textContent = { granted: '許可済み', denied: '拒否', default: '未設定' }[p] || p; g('nAsk').hidden = p !== 'default'; }
       catch (e) { g('nState').textContent = 'この環境では使えません'; g('nAsk').hidden = true; }
     };
-    g('sSound').onchange = e => { S.settings = { ...(S.settings || {}), sound: e.target.value }; save(); playSound(e.target.value); };
+    g('sSound').onchange = e => { setSetting('sound', e.target.value); playSound(e.target.value); };
     g('sPlay').onclick = () => playSound(g('sSound').value);
-    g('sCopy').onchange = e => { S.settings = { ...(S.settings || {}), copyOnOpen: e.target.value }; save(); };
-    if (g('sPage')) g('sPage').onchange = e => { S.settings = { ...(S.settings || {}), pageFetch: e.target.checked }; save(); };
-    g('sQuick').onchange = e => { S.settings = { ...(S.settings || {}), quickAdd: e.target.checked }; save(); updateModeLbl(); };
+    g('sCopy').onchange = e => setSetting('copyOnOpen', e.target.value);
+    if (g('sPage')) g('sPage').onchange = e => setSetting('pageFetch', e.target.checked);
+    g('sQuick').onchange = e => { setSetting('quickAdd', e.target.checked); updateModeLbl(); };
     g('rSample').onclick = () => { g('rSampleC').hidden = false; g('rSample').hidden = true; };
     g('rSampleYes').onclick = () => { S = IS_PWA ? emptyData() : sample(); save(); closeSheet(); view = { name: 'home' }; render(); toast(IS_PWA ? 'すべて消去しました' : 'サンプルに戻しました'); };
   });
 }
 
 // ---- 書き方ガイド ----
+// 例文（タップで入力欄に入る）と、その解釈・ほかのアプリとの比較表
 function openHelp() {
   const G = [
     ['話し言葉でOK', ['18時半に明日の件を設定して', 'あとで洗濯物取り込むのお願い', 'ちょっとしたら電話する', '寝る前に歯ブラシ持ってく', '仕事終わりに牛乳買う', '週明けに請求書出す', '明日10時に「資料を印刷」ってリマインドして', '明日9時 https://example.com 朝会']],
@@ -2266,7 +2362,7 @@ function openHelp() {
       <div>行を<b>左へスワイプ</b> → 1時間後・フラグ・削除</div>
       <div>リストの中で<b>左端から右へスワイプ</b> → 前の画面に戻る</div>
       <div>シートの<b>上の部分を下へ引く</b> → 閉じる</div></div></div></div>
-    ${G.map(([h, xs]) => `<div><div class="fgroup-h">${h}</div><div class="fgroup"><div class="guide">${xs.map(x => `<div><code data-try="${esc(x)}">${esc(x)}</code> <span class="val" style="font-size:13px">→ ${esc((() => { const gp = parseGroup(x); if (gp && gp.every) return `グループ ${gp.items.length}件・${gp.every.value}${UNIT_JA[gp.every.unit]}おき`; const p = parseInput(x); return p.rule ? describeRule(p.rule) : p.due ? fmtDue(p.due) : '日時なし'; })())}${(() => { const p = parseInput(x); return p.nag ? '・確実に' : ''; })()}</span></div>`).join('')}</div></div></div>`).join('')}
+    ${G.map(([h, xs]) => `<div><div class="fgroup-h">${h}</div><div class="fgroup"><div class="guide">${xs.map(x => `<div><code data-try="${esc(x)}">${esc(x)}</code> <span class="val" style="font-size:13px">→ ${esc((() => { const gp = parseGroup(x); if (gp && gp.every) return `グループ ${gp.items.length}件・${gp.every.value}${UNIT_LABEL[gp.every.unit]}おき`; const p = parseInput(x); return p.rule ? describeRule(p.rule) : p.due ? fmtDue(p.due) : '日時なし'; })())}${parseInput(x).nag ? '・確実に' : ''}</span></div>`).join('')}</div></div></div>`).join('')}
     <div><div class="fgroup-h">リマインくん・純正リマインダーとの比較</div><div class="fgroup tbl-wrap"><table class="cmp"><thead><tr><th>機能</th><th>リマインくん</th><th>純正</th><th>RE:main</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}</tbody></table></div>
     <div class="fgroup-f">「N日おき」は「1日おき＝隔日」と同じ数え方で、N+1日ごとになります。迷ったら「N日ごと」と書いてください。祝日は内閣府の規則から計算しています（特例で移動した年は未対応）。</div></div>
   </div>`;
@@ -2277,7 +2373,10 @@ function openHelp() {
 }
 
 // ---- 通知ループ ----
-const queue = [];
+// アプリを開いている間は10秒ごとに tick() で時刻を確かめ、来たものを queue に積んで上部のバナーで1件ずつ見せる
+const queue = []; // { id, test, step }
+// 「確実に通知」の最後の通知時刻（秒まで）。'YYYY-MM-DDTHH:mm:ss'
+const secStamp = d => fmtLocal(d) + ':' + pad(d.getSeconds());
 // 通知音（アプリを開いている間のバナー用）。音声ファイルは持たず、Web Audio で合成する。
 // iPhone では最初のタップで音を出せる状態にしておく必要がある
 const SOUNDS = {
@@ -2289,9 +2388,11 @@ const SOUNDS = {
   none: { name: 'なし', notes: [] },
 };
 let audioCtx = null;
+// AudioContext を用意する（止まっていれば再開）
 function audio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {} return audioCtx; }
 document.addEventListener('pointerdown', () => audio(), { once: true, passive: true });
-function playSound(key = (S.settings && S.settings.sound) || 'chime') {
+// 通知音を鳴らす。音符 [周波数, 開始秒, 長さ] を順に、すぐ減衰する音で鳴らす
+function playSound(key = setting('sound') || 'chime') {
   const snd = SOUNDS[key] || SOUNDS.chime; if (!snd.notes.length) return;
   const ctx = audio(); if (!ctx) return;
   const t0 = ctx.currentTime + .02;
@@ -2303,6 +2404,7 @@ function playSound(key = (S.settings && S.settings.sound) || 'chime') {
     o.connect(g); g.connect(ctx.destination); o.start(t0 + at); o.stop(t0 + at + len + .05);
   }
 }
+// 通知する: 音を鳴らしてバナーに積む。画面が隠れていて Web Push を使っていなければ、ブラウザの通知も出す
 function notify(r, test = false, step = null) {
   if (!document.hidden) playSound();
   if (!queue.some(x => x.id === r.id && x.step === step)) queue.push({ id: r.id, test, step });
@@ -2313,7 +2415,8 @@ function notify(r, test = false, step = null) {
   showBanner();
 }
 // ---- 通知を開いたら内容をコピー ----
-const copyMode = () => (S.settings && S.settings.copyOnOpen) || 'title';
+const copyMode = () => setting('copyOnOpen') || 'title';
+// 設定に合わせてコピーする文。r は表示している内容（グループなら項目）、r0 はメモを持つ元のリマインダー
 function copyTextFor(r, r0) {
   const m = copyMode();
   if (m === 'off') return '';
@@ -2321,6 +2424,7 @@ function copyTextFor(r, r0) {
   if (m === 'notes') { const n = (r0 && r0.notes) || ''; return n ? `${r.title}\n${n}` : r.title; }
   return r.title;
 }
+// クリップボードに書く。できたら true
 async function writeClip(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
   // 古い方式（ユーザー操作の中でだけ動く）
@@ -2329,29 +2433,32 @@ async function writeClip(text) {
     document.body.appendChild(t); t.select(); t.setSelectionRange(0, text.length); const ok = document.execCommand('copy'); t.remove(); return ok;
   } catch (e) { return false; }
 }
-let clipPending = null, clipKey = null;
+let clipPending = null, clipKey = null; // clipPending: 許可待ちでまだコピーできていない文 / clipKey: 最後に自動コピーした通知
 const markCopied = () => document.querySelectorAll('.copy-btn').forEach(c => { c.textContent = 'コピー済み'; });
+const copiedToast = () => toast('通知の内容をコピーしました', 1600);
 // 自動でコピーを試し、許可されなければ次のタップでコピーする
 function autoCopy(key, text) {
   if (!text || clipKey === key) return;
   clipKey = key; clipPending = null;
-  const done = () => { clipPending = null; markCopied(); toast('通知の内容をコピーしました', 1600); };
+  const done = () => { clipPending = null; markCopied(); copiedToast(); };
   const tryNow = () => document.hasFocus() && navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text).then(done, () => { clipPending = text; }) : Promise.resolve(clipPending = text);
   tryNow();
 }
 const clipOnTap = e => {
   if (!clipPending) return;
   const text = clipPending; clipPending = null;
-  writeClip(text).then(ok => { if (ok) { markCopied(); if (!e.target.closest('.copy-btn')) toast('通知の内容をコピーしました', 1600); } else clipPending = text; });
+  writeClip(text).then(ok => { if (ok) { markCopied(); if (!e.target.closest('.copy-btn')) copiedToast(); } else clipPending = text; });
 };
+// iPhone は画面に触れたとき・アプリに戻ったときにコピーが許可されるので、その時点で書く
 document.addEventListener('touchend', clipOnTap, true);
 document.addEventListener('click', clipOnTap, true);
-window.addEventListener('focus', () => { if (clipPending && navigator.clipboard) { const t = clipPending; navigator.clipboard.writeText(t).then(() => { if (clipPending === t) { clipPending = null; markCopied(); toast('通知の内容をコピーしました', 1600); } }, () => {}); } });
+window.addEventListener('focus', () => { if (clipPending && navigator.clipboard) { const t = clipPending; navigator.clipboard.writeText(t).then(() => { if (clipPending === t) { clipPending = null; markCopied(); copiedToast(); } }, () => {}); } });
+// queue の先頭をバナーに出す（URL を開く・完了・スヌーズ・コピー）。空なら隠す
 function showBanner() {
   const b = $('#banner');
   if (!queue.length) { b.hidden = true; clipPending = null; return; }
   const { id, test, step } = queue[0];
-  const r0 = S.reminders.find(x => x.id === id);
+  const r0 = findRem(id);
   if (!r0 || (step != null && !r0.steps[step])) { queue.shift(); return showBanner(); }
   // グループの項目は、その項目の内容と URL で通知する
   let r = r0, sub;
@@ -2378,13 +2485,14 @@ function showBanner() {
     if (!test || a !== 'close') {
       if (step != null) {
         if (a === 'done') msg = esc(completeStep(r0, step));
-        else if (a !== 'close') { const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() + +a); r0.steps[step].snoozeUntil = fmtLocal(d); r0.steps[step].lastNotified = null; save(); msg = `${fmtDue(d)} にもう一度お知らせします`; }
+        else if (a !== 'close') msg = snoozeAt(r0, step, minutesLater(+a));
       } else if (a === 'done') msg = `「${esc(r.title)}」${completeRem(r)}`;
       else if (a !== 'close') msg = snooze(r, +a);
     }
     queue.shift(); render(); if (msg) toast(msg); showBanner();
   });
 }
+// 時刻が来たものを通知する。同じ回を二度出さないよう、出した回を lastNotified に覚えておく
 function tick() {
   const now = new Date();
   for (const r of S.reminders) {
@@ -2393,7 +2501,7 @@ function tick() {
       const ts = stepTimes(r);
       r.steps.forEach((st, i) => {
         if (st.done) return;
-        const t = st.snoozeUntil ? parseLocal(st.snoozeUntil) : ts[i];
+        const t = stepAt(st, ts[i]);
         if (!t || t > now) return;
         const key = fmtLocal(t);
         if (st.lastNotified !== key) { st.lastNotified = key; save(); notify(r, false, i); }
@@ -2403,15 +2511,17 @@ function tick() {
     const d = dueOf(r); if (!d || d > now) continue;
     const key = r.snoozeUntil || r.due;
     if (r.lastNotified !== key) {
-      r.lastNotified = key; r.lastNagAt = fmtLocal(now) + ':' + pad(now.getSeconds()); r.nagCount = 0; save(); notify(r);
+      r.lastNotified = key; r.lastNagAt = secStamp(now); r.nagCount = 0; save(); notify(r);
     } else if (r.nag && r.lastNagAt && (r.nagCount || 0) < 24) {
+      // 「確実に通知」: 完了するまで nag.every 分ごとに、最大 24 回まで通知し直す
       const last = new Date(r.lastNagAt.slice(0, 16)); last.setSeconds(+r.lastNagAt.slice(17) || 0);
-      if (now - last >= r.nag.every * 60000) { r.lastNagAt = fmtLocal(now) + ':' + pad(now.getSeconds()); r.nagCount = (r.nagCount || 0) + 1; save(); notify(r); }
+      if (now - last >= r.nag.every * 60000) { r.lastNagAt = secStamp(now); r.nagCount = (r.nagCount || 0) + 1; save(); notify(r); }
     }
   }
 }
 
 // ---- 起動 ----
+// 保存データがなければ、アプリ版は空、単体版はサンプルで始める
 S = load() || (wantsSample() ? sample() : emptyData());
 save();
 render();
@@ -2419,5 +2529,6 @@ updatePreview();
 updateModeLbl();
 tick();
 setInterval(tick, 10000);
+// 「今日」「明日」などの表示を1分ごとに更新する（シートを開いている間や一覧を操作中は描き直さない）
 setInterval(() => { if ($('#sheetWrap').hidden && !document.activeElement?.closest?.('#scroll')) render(); }, 60000);
 </script>
