@@ -1,6 +1,13 @@
 // app/app.html と app/engine.js から、配信用の public/index.html と、単体版 dist/rimain.html を作る
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
-const app = readFileSync('app/app.html', 'utf8');
+// AI 用プロンプトは docs/ai-prompt.md の PROMPT START〜END の枠の中身を正本とし、アプリの AI_PROMPT に埋め込む
+const promptDoc = readFileSync('docs/ai-prompt.md', 'utf8');
+const pm = promptDoc.match(/<!-- PROMPT START -->\n````text\n([\s\S]*?)\n````\n<!-- PROMPT END -->/);
+if (!pm) throw new Error('docs/ai-prompt.md にプロンプトの枠がありません');
+const AI_MARK = "/*AI_PROMPT*/''";
+const appSrc = readFileSync('app/app.html', 'utf8');
+if (!appSrc.includes(AI_MARK)) throw new Error('app.html に /*AI_PROMPT*/ がありません');
+const app = appSrc.replace(AI_MARK, () => JSON.stringify(pm[1]));
 const engine = readFileSync('app/engine.js', 'utf8');
 const MARK = '<script>\n/*ENGINE*/\n</script>';
 if (!app.includes(MARK)) throw new Error('app.html に /*ENGINE*/ がありません');
