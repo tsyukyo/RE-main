@@ -1,0 +1,24 @@
+{
+  "format": "rimain.reminders",
+  "version": 1,
+  "lists": [
+    { "id": "inbox", "name": "リマインダー", "color": "blue" },
+    { "id": "work", "name": "仕事", "color": "purple" }
+  ],
+  "reminders": [
+    { "title": "燃えるゴミを出す", "rule": { "freq": "weekly", "byDay": [2, 5], "times": ["07:30"] } },
+    { "title": "歯医者", "due": "2026-10-24T15:00" },
+    { "title": "家賃を振り込む", "rule": { "freq": "monthly", "byMonthDay": [25], "bizBefore": true } },
+    { "title": "資源ごみを出す", "rule": { "freq": "weekly", "interval": 2, "byDay": [3], "times": ["08:00"] } },
+    { "title": "定例ミーティング", "url": "https://example.com/meet", "list": "work", "rule": { "freq": "monthly", "byNth": { "n": 2, "wd": 2 }, "times": ["10:00"] } },
+    { "title": "薬を飲む", "nag": { "every": 5 }, "rule": { "freq": "daily", "times": ["22:00"] } },
+    { "title": "出社", "list": "work", "rule": { "freq": "weekly", "byDay": [1, 2, 3, 4, 5], "times": ["08:00"], "start": "2026-10-26", "skipHolidays": true, "until": "2026-12-31" } },
+    { "title": "エアコンのフィルター掃除", "rule": { "freq": "afterDone", "interval": 3, "unit": "month" } },
+    { "kind": "group", "title": "地域チェック", "due": "2026-11-03T09:00", "spacing": "equal", "every": { "value": 30, "unit": "minute" },
+      "steps": [ { "title": "千葉" }, { "title": "東京" }, { "title": "神奈川" } ] },
+    { "title": "ベランダの水やり", "rule": { "freq": "parity", "parity": "even", "times": ["07:00"] } },
+    { "title": "水分補給", "rule": { "freq": "hourly", "interval": 3 } },
+    { "title": "母の誕生日", "rule": { "freq": "yearly", "byMonth": 3, "byMonthDay": [10] } },
+    { "title": "経費精算", "list": "work", "priority": 2, "rule": { "freq": "monthly", "byMonthDay": [-1], "times": ["18:00"] } }
+  ]
+}

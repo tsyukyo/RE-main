@@ -2196,12 +2196,29 @@ function exportObj() {
   return { format: FORMAT, version: FORMAT_VERSION, exportedAt: fmtLocal(new Date()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
     lists: S.lists, reminders: S.reminders.map(({ lastNotified, lastNagAt, nagCount, ...r }) => (isGroup(r) ? { ...r, steps: r.steps.map(({ lastNotified, snoozeUntil, ...st }) => st) } : r)) };
 }
+// 'YYYY-MM-DDTHH:mm' にそろえる。日付だけなら 9:00（アプリで時刻を書かなかったときと同じ）。読めなければ null
+function normDue(s) {
+  if (!s) return null;
+  const d = parseLocal(/T/.test(String(s)) ? s : s + 'T09:00');
+  return d ? fmtLocal(d) : null;
+}
+// 繰り返しルールの書き方の揺れをそろえる（AI が書いた JSON 向け）: 時刻 '7:30' → '07:30'、配列のはずの項目が1つだけなら配列に
+function normRule(rule) {
+  const r = { ...rule };
+  const hhmm = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t).trim()); return m && +m[1] < 24 && +m[2] < 60 ? `${pad(+m[1])}:${m[2]}` : null; };
+  if (r.times != null) { r.times = [].concat(r.times).map(hhmm).filter(Boolean); if (!r.times.length) delete r.times; }
+  for (const k of ['byDay', 'onlyDays', 'byMonthDay']) if (r[k] != null && !Array.isArray(r[k])) r[k] = [r[k]];
+  return r;
+}
 // 読み込んだ JSON を確かめ、足りない項目を補った { lists, reminders } にする。おかしなところがあれば日本語のエラーを投げる
-function validateImport(d) {
+// 繰り返しで due（最初の通知）が無ければ、ルールから計算する（rule.start が未来ならその日から）
+// keepLists: ファイルの lists に無くても、そのまま使ってよいリストの id（追加で取り込むときの今あるリスト）
+function validateImport(d, now = new Date(), keepLists = []) {
   if (!d || typeof d !== 'object') throw new Error('JSON の形式ではありません');
   if (d.format && d.format !== FORMAT) throw new Error(`format が "${d.format}" です。"${FORMAT}" のファイルを選んでください`);
   if (!Array.isArray(d.reminders)) throw new Error('reminders 配列が見つかりません');
   const lists = Array.isArray(d.lists) && d.lists.length ? d.lists.filter(l => l && l.id && l.name) : [{ id: 'inbox', name: 'リマインダー', color: 'blue' }];
+  const listOf = id => (lists.some(l => l.id === id) || keepLists.includes(id) ? id : lists[0].id);
   const reminders = d.reminders.map((r, i) => {
     if (!r || typeof r.title !== 'string') throw new Error(`${i + 1}件目に title がありません`);
     if (r.due && !parseLocal(r.due)) throw new Error(`${i + 1}件目の due "${r.due}" が読めません（例: 2026-10-20T09:00）`);
@@ -2210,21 +2227,29 @@ function validateImport(d) {
       if (!Array.isArray(r.steps) || !r.steps.length) throw new Error(`${i + 1}件目のグループに steps がありません`);
       if (!parseLocal(r.due)) throw new Error(`${i + 1}件目のグループの due（最初の通知）が読めません`);
       const unit = u => (['minute', 'hour', 'day'].includes(u) ? u : 'minute');
-      return { id: r.id || uid(), kind: 'group', title: r.title, notes: r.notes || '', list: lists.some(l => l.id === r.list) ? r.list : lists[0].id, due: r.due,
+      return { id: r.id || uid(), kind: 'group', title: r.title, notes: r.notes || '', list: listOf(r.list), due: normDue(r.due),
         spacing: r.spacing === 'each' ? 'each' : 'equal', every: { value: Math.max(0, +(r.every || {}).value || 0), unit: unit((r.every || {}).unit) },
         urlMode: ['none', 'same', 'each'].includes(r.urlMode) ? r.urlMode : 'none', url: normUrl(r.url),
         steps: r.steps.map((st, j) => { if (!st || typeof st.title !== 'string') throw new Error(`${i + 1}件目のグループの${j + 1}番目に title がありません`); return { id: st.id || uid(), title: st.title, url: normUrl(st.url), after: { value: Math.max(0, +(st.after || {}).value || 0), unit: unit((st.after || {}).unit) }, done: !!st.done, doneAt: st.doneAt || null }; }),
         flagged: !!r.flagged, priority: +r.priority || 0, done: !!r.done, doneAt: r.doneAt || null, history: [], createdAt: r.createdAt || fmtLocal(new Date()) };
     }
-    return { id: r.id || uid(), title: r.title, notes: r.notes || '', url: normUrl(r.url), list: lists.some(l => l.id === r.list) ? r.list : lists[0].id, due: r.due || null, rule: r.rule || null, nag: r.nag || null,
+    let due = normDue(r.due); const rule = r.rule ? normRule(r.rule) : null;
+    if (rule && due && !rule.start) rule.start = due.slice(0, 10);
+    if (rule && !due && !r.done) {
+      const st = parseLocal(rule.start), first = firstOccurrence(rule, st && st > now ? new Date(st - 60000) : now);
+      if (!first) throw new Error(`${i + 1}件目の繰り返しから最初の通知日時を決められません`);
+      due = fmtLocal(first);
+    }
+    const nag = r.nag ? { every: Math.min(120, Math.max(1, Math.round(+r.nag.every) || 5)) } : null; // 「確実に通知」の間隔（分）
+    return { id: r.id || uid(), title: r.title, notes: r.notes || '', url: normUrl(r.url), list: listOf(r.list), due, rule, nag,
       flagged: !!r.flagged, priority: +r.priority || 0, done: !!r.done, doneAt: r.doneAt || null, count: +r.count || 0, history: Array.isArray(r.history) ? r.history : [], input: r.input || '', createdAt: r.createdAt || fmtLocal(new Date()), snoozeUntil: r.snoozeUntil || null };
   });
   return { lists, reminders };
 }
 // 取り込む。mode が 'replace' なら置き換え、それ以外は今のデータに追加（id が重なれば振り直す）。取り込んだ件数を返す
 function applyImport(d, mode) {
-  const v = validateImport(d);
-  if (mode === 'replace') { S = { format: FORMAT, version: FORMAT_VERSION, lists: v.lists, reminders: v.reminders }; }
+  const v = validateImport(d, new Date(), mode === 'replace' ? [] : S.lists.map(l => l.id));
+  if (mode === 'replace') { S = { format: FORMAT, version: FORMAT_VERSION, lists: v.lists, reminders: v.reminders, settings: S.settings }; }
   else {
     for (const l of v.lists) if (!S.lists.some(x => x.id === l.id)) S.lists.push(l);
     const ids = new Set(S.reminders.map(r => r.id));
@@ -2233,6 +2258,16 @@ function applyImport(d, mode) {
   }
   save(); render();
   return v.reminders.length;
+}
+// ---- AI に JSON を作ってもらう ----
+// プロンプトの正本は docs/ai-prompt.md。build.mjs が下の値に埋め込む
+const AI_PROMPT = /*AI_PROMPT*/'';
+// 今日の日時・2週間分の曜日表・今あるリストを入れたプロンプト
+function aiPrompt(now = new Date()) {
+  const day = d => `${ymd(d)}(${WD[d.getDay()]})`;
+  const cal = [0, 7].map(w => '  ' + Array.from({ length: 7 }, (_, i) => day(addDays(now, w + i))).join(' ')).join('\n');
+  const lists = JSON.stringify(S.lists.map(({ id, name, color }) => ({ id, name, color })));
+  return AI_PROMPT.replace('{{TODAY}}', `${day(now)} ${hm(now).padStart(5, '0')}`).replace('{{CALENDAR}}', cal).replace('{{LISTS}}', lists);
 }
 // 「ファイルと設定」画面
 function openData() {
@@ -2252,7 +2287,10 @@ function openData() {
       <textarea class="mono" id="iTxt" placeholder="ここに JSON を貼り付けることもできます" aria-label="インポートする JSON" style="min-height:90px"></textarea>
       <button class="btn" id="iGo">貼り付けた JSON を取り込む</button>
       <div class="msg" id="iMsg"></div>
-    </div></div>
+      <button class="btn" id="iAi">AI 用のプロンプトをコピー</button>
+      <textarea class="mono" id="iAiTxt" readonly aria-label="AI 用のプロンプト" hidden></textarea>
+      <div class="msg" id="aiMsg"></div>
+    </div><div class="fgroup-f">ChatGPT や Claude などに貼り付け、続けて予定を書いて送ると、ここに貼れる JSON を作ってくれます。今日の日付と今のリストが入った状態でコピーされます。</div></div>
     <div><div class="fgroup-h">通知音</div><div class="fgroup">
       <div class="f"><label for="sSound">アプリを開いているとき</label><select id="sSound">${Object.entries(SOUNDS).map(([k, v]) => `<option value="${k}" ${(setting('sound') || 'chime') === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></div>
       <button class="btn" id="sPlay">試しに鳴らす</button>
@@ -2306,11 +2344,20 @@ function openData() {
     };
     sh.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { mode = b.dataset.mode; sh.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
     const doImport = text => {
+      // AI の返事をまるごと貼られたときは、```json のコードブロックの中だけを読む
+      const fence = text.match(/```(?:json)?\s*\n([\s\S]*?)```/);
+      if (fence) text = fence[1];
       try { const n = applyImport(JSON.parse(text), mode); say('iMsg', `${n}件を${mode === 'replace' ? '置き換えて' : '追加して'}取り込みました`, 'ok'); }
       catch (e) { say('iMsg', e instanceof SyntaxError ? 'JSON として読めませんでした。括弧やカンマを確認してください' : e.message, 'err'); }
     };
     g('iFile').onchange = e => { const f = e.target.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => doImport(String(fr.result)); fr.readAsText(f); };
     g('iGo').onclick = () => { const t = g('iTxt').value.trim(); if (t) doImport(t); };
+    g('iAi').onclick = () => {
+      const text = aiPrompt();
+      // クリップボードが使えないときは、プロンプトを表示して選択し、手でコピーしてもらう
+      const fallback = () => { const t = g('iAiTxt'); t.value = text; t.hidden = false; t.focus(); t.select(); say('aiMsg', '下のテキストを選択しました。コピーしてください。'); };
+      try { navigator.clipboard.writeText(text).then(() => say('aiMsg', 'コピーしました。AI に貼り付けて、続けて予定を書いてください', 'ok'), fallback); } catch (e) { fallback(); }
+    };
     if (window.rimainPushUI) window.rimainPushUI(g('pushBox'));
     if (g('nAsk')) g('nAsk').onclick = async () => {
       try { const p = await Notification.requestPermission(); g('nState').textContent = { granted: '許可済み', denied: '拒否', default: '未設定' }[p] || p; g('nAsk').hidden = p !== 'default'; }

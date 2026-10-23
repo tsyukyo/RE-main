@@ -2207,12 +2207,29 @@ function exportObj() {
   return { format: FORMAT, version: FORMAT_VERSION, exportedAt: fmtLocal(new Date()), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
     lists: S.lists, reminders: S.reminders.map(({ lastNotified, lastNagAt, nagCount, ...r }) => (isGroup(r) ? { ...r, steps: r.steps.map(({ lastNotified, snoozeUntil, ...st }) => st) } : r)) };
 }
+// 'YYYY-MM-DDTHH:mm' にそろえる。日付だけなら 9:00（アプリで時刻を書かなかったときと同じ）。読めなければ null
+function normDue(s) {
+  if (!s) return null;
+  const d = parseLocal(/T/.test(String(s)) ? s : s + 'T09:00');
+  return d ? fmtLocal(d) : null;
+}
+// 繰り返しルールの書き方の揺れをそろえる（AI が書いた JSON 向け）: 時刻 '7:30' → '07:30'、配列のはずの項目が1つだけなら配列に
+function normRule(rule) {
+  const r = { ...rule };
+  const hhmm = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t).trim()); return m && +m[1] < 24 && +m[2] < 60 ? `${pad(+m[1])}:${m[2]}` : null; };
+  if (r.times != null) { r.times = [].concat(r.times).map(hhmm).filter(Boolean); if (!r.times.length) delete r.times; }
+  for (const k of ['byDay', 'onlyDays', 'byMonthDay']) if (r[k] != null && !Array.isArray(r[k])) r[k] = [r[k]];
+  return r;
+}
 // 読み込んだ JSON を確かめ、足りない項目を補った { lists, reminders } にする。おかしなところがあれば日本語のエラーを投げる
-function validateImport(d) {
+// 繰り返しで due（最初の通知）が無ければ、ルールから計算する（rule.start が未来ならその日から）
+// keepLists: ファイルの lists に無くても、そのまま使ってよいリストの id（追加で取り込むときの今あるリスト）
+function validateImport(d, now = new Date(), keepLists = []) {
   if (!d || typeof d !== 'object') throw new Error('JSON の形式ではありません');
   if (d.format && d.format !== FORMAT) throw new Error(`format が "${d.format}" です。"${FORMAT}" のファイルを選んでください`);
   if (!Array.isArray(d.reminders)) throw new Error('reminders 配列が見つかりません');
   const lists = Array.isArray(d.lists) && d.lists.length ? d.lists.filter(l => l && l.id && l.name) : [{ id: 'inbox', name: 'リマインダー', color: 'blue' }];
+  const listOf = id => (lists.some(l => l.id === id) || keepLists.includes(id) ? id : lists[0].id);
   const reminders = d.reminders.map((r, i) => {
     if (!r || typeof r.title !== 'string') throw new Error(`${i + 1}件目に title がありません`);
     if (r.due && !parseLocal(r.due)) throw new Error(`${i + 1}件目の due "${r.due}" が読めません（例: 2026-10-20T09:00）`);
@@ -2221,21 +2238,29 @@ function validateImport(d) {
       if (!Array.isArray(r.steps) || !r.steps.length) throw new Error(`${i + 1}件目のグループに steps がありません`);
       if (!parseLocal(r.due)) throw new Error(`${i + 1}件目のグループの due（最初の通知）が読めません`);
       const unit = u => (['minute', 'hour', 'day'].includes(u) ? u : 'minute');
-      return { id: r.id || uid(), kind: 'group', title: r.title, notes: r.notes || '', list: lists.some(l => l.id === r.list) ? r.list : lists[0].id, due: r.due,
+      return { id: r.id || uid(), kind: 'group', title: r.title, notes: r.notes || '', list: listOf(r.list), due: normDue(r.due),
         spacing: r.spacing === 'each' ? 'each' : 'equal', every: { value: Math.max(0, +(r.every || {}).value || 0), unit: unit((r.every || {}).unit) },
         urlMode: ['none', 'same', 'each'].includes(r.urlMode) ? r.urlMode : 'none', url: normUrl(r.url),
         steps: r.steps.map((st, j) => { if (!st || typeof st.title !== 'string') throw new Error(`${i + 1}件目のグループの${j + 1}番目に title がありません`); return { id: st.id || uid(), title: st.title, url: normUrl(st.url), after: { value: Math.max(0, +(st.after || {}).value || 0), unit: unit((st.after || {}).unit) }, done: !!st.done, doneAt: st.doneAt || null }; }),
         flagged: !!r.flagged, priority: +r.priority || 0, done: !!r.done, doneAt: r.doneAt || null, history: [], createdAt: r.createdAt || fmtLocal(new Date()) };
     }
-    return { id: r.id || uid(), title: r.title, notes: r.notes || '', url: normUrl(r.url), list: lists.some(l => l.id === r.list) ? r.list : lists[0].id, due: r.due || null, rule: r.rule || null, nag: r.nag || null,
+    let due = normDue(r.due); const rule = r.rule ? normRule(r.rule) : null;
+    if (rule && due && !rule.start) rule.start = due.slice(0, 10);
+    if (rule && !due && !r.done) {
+      const st = parseLocal(rule.start), first = firstOccurrence(rule, st && st > now ? new Date(st - 60000) : now);
+      if (!first) throw new Error(`${i + 1}件目の繰り返しから最初の通知日時を決められません`);
+      due = fmtLocal(first);
+    }
+    const nag = r.nag ? { every: Math.min(120, Math.max(1, Math.round(+r.nag.every) || 5)) } : null; // 「確実に通知」の間隔（分）
+    return { id: r.id || uid(), title: r.title, notes: r.notes || '', url: normUrl(r.url), list: listOf(r.list), due, rule, nag,
       flagged: !!r.flagged, priority: +r.priority || 0, done: !!r.done, doneAt: r.doneAt || null, count: +r.count || 0, history: Array.isArray(r.history) ? r.history : [], input: r.input || '', createdAt: r.createdAt || fmtLocal(new Date()), snoozeUntil: r.snoozeUntil || null };
   });
   return { lists, reminders };
 }
 // 取り込む。mode が 'replace' なら置き換え、それ以外は今のデータに追加（id が重なれば振り直す）。取り込んだ件数を返す
 function applyImport(d, mode) {
-  const v = validateImport(d);
-  if (mode === 'replace') { S = { format: FORMAT, version: FORMAT_VERSION, lists: v.lists, reminders: v.reminders }; }
+  const v = validateImport(d, new Date(), mode === 'replace' ? [] : S.lists.map(l => l.id));
+  if (mode === 'replace') { S = { format: FORMAT, version: FORMAT_VERSION, lists: v.lists, reminders: v.reminders, settings: S.settings }; }
   else {
     for (const l of v.lists) if (!S.lists.some(x => x.id === l.id)) S.lists.push(l);
     const ids = new Set(S.reminders.map(r => r.id));
@@ -2244,6 +2269,16 @@ function applyImport(d, mode) {
   }
   save(); render();
   return v.reminders.length;
+}
+// ---- AI に JSON を作ってもらう ----
+// プロンプトの正本は docs/ai-prompt.md。build.mjs が下の値に埋め込む
+const AI_PROMPT = "あなたは iPhone のリマインダーアプリ「RE:main」に取り込むための JSON を作る係です。\nこのメッセージの最後の「予定:」のあとに、私がやること・予定を話し言葉で書きます。それを読み取り、RE:main の「インポート」欄にそのまま貼り付けられる JSON を作ってください。\n「予定:」のあとが空なら、「予定を書いてください」とだけ返し、次のメッセージで受け取ってください。\n\n# 前提\n- 今日: {{TODAY}}（日本時間）\n- 日付と曜日の対応表（曜日は必ずこの表で確かめる。表より先の日付は自分で計算する）:\n{{CALENDAR}}\n- 今あるリスト: {{LISTS}}\n\n# 出力のしかた\n- ```json のコードブロックを1つだけ出す。コードブロックの外には、読み取り方の短い確認（1件1行、「毎週火・金 7:30 燃えるゴミ」のように）だけ書く。\n- 日時がどうしても決められないものだけ、JSON を出す前に質問する。それ以外は下の決まりで補って、聞かずに作る。\n- JSON はコメントや末尾カンマを入れない、正しい JSON にする。\n\n# JSON の形\n{\n  \"format\": \"rimain.reminders\",\n  \"version\": 1,\n  \"lists\": [ { \"id\": \"inbox\", \"name\": \"リマインダー\", \"color\": \"blue\" } ],\n  \"reminders\": [ ... ]\n}\n- lists には「今あるリスト」をそのまま入れる。新しいリストが必要なら追加する（id は英小文字の短い語、color は blue / red / orange / green / teal / purple / indigo / gray のどれか）。\n- 日時はすべて日本時間で \"YYYY-MM-DDTHH:mm\"（例 \"2026-10-25T18:30\"）。秒・タイムゾーン・\"Z\" は付けない。日付だけは \"YYYY-MM-DD\"。\n- 曜日の番号: 0=日 1=月 2=火 3=水 4=木 5=金 6=土。時刻は \"HH:mm\"（例 \"07:30\"）。\n\n# リマインダー1件の項目\n必須は title だけ。使わない項目は書かない。\n- \"title\": 通知に出る短い文（例 \"燃えるゴミを出す\"）\n- \"notes\": メモ（任意）\n- \"url\": 通知をタップしたときに開く https の URL（任意）\n- \"list\": 入れるリストの id（省略すると lists の先頭）\n- \"due\": 通知する日時。単発の予定では必ず書く。繰り返しでは書かない（アプリがルールから最初の日時を計算する）\n- \"rule\": 繰り返しのルール（下記）。単発なら書かない\n- \"nag\": 完了するまで再通知するとき { \"every\": 分 }（1〜120。「確実に」「しつこく」なら { \"every\": 5 }）\n- \"flagged\": フラグを付けるなら true\n- \"priority\": 優先度 0〜3（「大事」「重要」なら 2）\n\n# 繰り返し（rule）\n共通の項目:\n- \"freq\": 下のどれか（必須）\n- \"interval\": 何回ごとか（1 なら省略。隔週・隔日・隔月は 2。「N日おき」は N+1、「N日ごと」は N）\n- \"times\": 通知する時刻の配列（例 [\"08:00\",\"20:00\"]。省略すると 9:00）\n- \"start\": この日から始める \"YYYY-MM-DD\"（「来月から」「11/1から」のときだけ）\n- \"until\": この日まで \"YYYY-MM-DD\"、\"count\": この回数まで\n- \"skipHolidays\": true で祝日は通知しない\n- \"onlyDays\": 曜日の番号の配列。daily / parity などで「平日だけ」等に絞る（例 [1,2,3,4,5]）\n\nfreq ごとの書き方:\n- 毎日・隔日・N日ごと: { \"freq\": \"daily\", \"interval\": 2, \"times\": [\"21:00\"] }\n- 毎週・隔週（曜日を指定）: { \"freq\": \"weekly\", \"byDay\": [2,5], \"times\": [\"07:30\"] }\n- 平日: { \"freq\": \"weekly\", \"byDay\": [1,2,3,4,5] }（「祝日除く」「祝日は休み」なら \"skipHolidays\": true を足す）\n- 毎月 N 日: { \"freq\": \"monthly\", \"byMonthDay\": [25] }（月末は -1。複数日は [1,15]）\n- 毎月 N 日、土日祝なら前の平日: 上に \"bizBefore\": true を足す\n- 毎月 第N ○曜日: { \"freq\": \"monthly\", \"byNth\": { \"n\": 2, \"wd\": 2 } }（最終○曜日は n: -1）\n- 毎年: { \"freq\": \"yearly\", \"byMonth\": 3, \"byMonthDay\": [10] }\n- 偶数日・奇数日: { \"freq\": \"parity\", \"parity\": \"even\" }（奇数は \"odd\"）\n- N 時間ごと: { \"freq\": \"hourly\", \"interval\": 3 }、N 分ごと: { \"freq\": \"minutely\", \"interval\": 30 }（\"times\": [\"09:00\"] で開始時刻）\n- 完了してから N 後: { \"freq\": \"afterDone\", \"interval\": 1, \"unit\": \"month\" }（unit は minute / hour / day / week / month / year）\n\n# 時間差で順番に通知するグループ\n「9時から 千葉、東京、神奈川を30分おき」のように、1つの用事を時間差で順に知らせたいときだけ使う。\n{ \"kind\": \"group\", \"title\": \"まとめの名前\", \"due\": \"最初の通知日時\", \"spacing\": \"equal\", \"every\": { \"value\": 30, \"unit\": \"minute\" },\n  \"steps\": [ { \"title\": \"千葉\" }, { \"title\": \"東京\" }, { \"title\": \"神奈川\" } ] }\n- unit は minute / hour / day。間隔が項目ごとに違うときは \"spacing\": \"each\" にして、各 step に \"after\": { \"value\": 25, \"unit\": \"minute\" }（ひとつ前からの間隔。1件目は 0）を書く\n- グループには rule と nag は使えない\n\n# あいまいな言い方の決まり\n- 「祝日除く」「祝日はなし」「祝日は休み」→ \"skipHolidays\": true\n- 時刻なし → 9:00。朝 8:00、昼 12:00、おやつ 15:00、夕方 17:00、仕事終わり・帰り 18:00、夜・晩 20:00、寝る前 22:00、起きたら 7:00\n- 「明日」「来週金曜」などは今日と曜日表から計算する。「週明け」は次の月曜\n- 単発の due は今より後にする。今日の時刻がもう過ぎていれば明日にする\n- 年が書かれていない日付は、今日以降で一番近いその日\n- 「〜の3日前に」のような前もっての通知は、その日時を due にして title に元の予定を書く（例「3日前: 車検」）\n- 1つの文に予定が複数あれば、別々のリマインダーにする\n\n# 例\n入力: 毎週火曜と金曜の朝7時半に燃えるゴミ。明後日の15時に歯医者、確実に。毎月25日に家賃（土日なら前の平日）\n出力:\n```json\n{\n  \"format\": \"rimain.reminders\",\n  \"version\": 1,\n  \"lists\": [ { \"id\": \"inbox\", \"name\": \"リマインダー\", \"color\": \"blue\" } ],\n  \"reminders\": [\n    { \"title\": \"燃えるゴミを出す\", \"rule\": { \"freq\": \"weekly\", \"byDay\": [2, 5], \"times\": [\"07:30\"] } },\n    { \"title\": \"歯医者\", \"due\": \"（明後日の日付）T15:00\", \"nag\": { \"every\": 5 } },\n    { \"title\": \"家賃を振り込む\", \"rule\": { \"freq\": \"monthly\", \"byMonthDay\": [25], \"bizBefore\": true } }\n  ]\n}\n```\n（例の「（明後日の日付）」は実際の日付にする。lists は例でも「今あるリスト」を全部入れる）\n\n予定:";
+// 今日の日時・2週間分の曜日表・今あるリストを入れたプロンプト
+function aiPrompt(now = new Date()) {
+  const day = d => `${ymd(d)}(${WD[d.getDay()]})`;
+  const cal = [0, 7].map(w => '  ' + Array.from({ length: 7 }, (_, i) => day(addDays(now, w + i))).join(' ')).join('\n');
+  const lists = JSON.stringify(S.lists.map(({ id, name, color }) => ({ id, name, color })));
+  return AI_PROMPT.replace('{{TODAY}}', `${day(now)} ${hm(now).padStart(5, '0')}`).replace('{{CALENDAR}}', cal).replace('{{LISTS}}', lists);
 }
 // 「ファイルと設定」画面
 function openData() {
@@ -2263,7 +2298,10 @@ function openData() {
       <textarea class="mono" id="iTxt" placeholder="ここに JSON を貼り付けることもできます" aria-label="インポートする JSON" style="min-height:90px"></textarea>
       <button class="btn" id="iGo">貼り付けた JSON を取り込む</button>
       <div class="msg" id="iMsg"></div>
-    </div></div>
+      <button class="btn" id="iAi">AI 用のプロンプトをコピー</button>
+      <textarea class="mono" id="iAiTxt" readonly aria-label="AI 用のプロンプト" hidden></textarea>
+      <div class="msg" id="aiMsg"></div>
+    </div><div class="fgroup-f">ChatGPT や Claude などに貼り付け、続けて予定を書いて送ると、ここに貼れる JSON を作ってくれます。今日の日付と今のリストが入った状態でコピーされます。</div></div>
     <div><div class="fgroup-h">通知音</div><div class="fgroup">
       <div class="f"><label for="sSound">アプリを開いているとき</label><select id="sSound">${Object.entries(SOUNDS).map(([k, v]) => `<option value="${k}" ${(setting('sound') || 'chime') === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select></div>
       <button class="btn" id="sPlay">試しに鳴らす</button>
@@ -2317,11 +2355,20 @@ function openData() {
     };
     sh.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { mode = b.dataset.mode; sh.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
     const doImport = text => {
+      // AI の返事をまるごと貼られたときは、```json のコードブロックの中だけを読む
+      const fence = text.match(/```(?:json)?\s*\n([\s\S]*?)```/);
+      if (fence) text = fence[1];
       try { const n = applyImport(JSON.parse(text), mode); say('iMsg', `${n}件を${mode === 'replace' ? '置き換えて' : '追加して'}取り込みました`, 'ok'); }
       catch (e) { say('iMsg', e instanceof SyntaxError ? 'JSON として読めませんでした。括弧やカンマを確認してください' : e.message, 'err'); }
     };
     g('iFile').onchange = e => { const f = e.target.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => doImport(String(fr.result)); fr.readAsText(f); };
     g('iGo').onclick = () => { const t = g('iTxt').value.trim(); if (t) doImport(t); };
+    g('iAi').onclick = () => {
+      const text = aiPrompt();
+      // クリップボードが使えないときは、プロンプトを表示して選択し、手でコピーしてもらう
+      const fallback = () => { const t = g('iAiTxt'); t.value = text; t.hidden = false; t.focus(); t.select(); say('aiMsg', '下のテキストを選択しました。コピーしてください。'); };
+      try { navigator.clipboard.writeText(text).then(() => say('aiMsg', 'コピーしました。AI に貼り付けて、続けて予定を書いてください', 'ok'), fallback); } catch (e) { fallback(); }
+    };
     if (window.rimainPushUI) window.rimainPushUI(g('pushBox'));
     if (g('nAsk')) g('nAsk').onclick = async () => {
       try { const p = await Notification.requestPermission(); g('nState').textContent = { granted: '許可済み', denied: '拒否', default: '未設定' }[p] || p; g('nAsk').hidden = p !== 'default'; }

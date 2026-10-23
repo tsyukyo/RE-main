@@ -33,8 +33,14 @@ npm test                      # 暗号化と VAPID 署名の検証
 node test/finddates-test.cjs  # 文章から期日を探す処理
 node test/server.test.mjs     # wrangler dev に対する通しの確認（偽のプッシュサービスを使う）
 node test/pwa.e2e.cjs         # 画面と Service Worker の確認（Playwright）
+node test/ai-import.e2e.cjs   # AI 用プロンプトと、AI が返す形の JSON の取り込み（dist/rimain.html を使う。サーバー不要）
 node test/scan.e2e.cjs        # 写真・文章から期日を拾う（page / cal / voice / swipe の e2e も同様）
 ```
+
+## データ形式と AI での作成
+
+- [docs/json-format.md](docs/json-format.md) … エクスポート／インポートする JSON（`rimain.reminders` v1）の仕様
+- [docs/ai-prompt.md](docs/ai-prompt.md) … ChatGPT・Claude などに予定を書いて、取り込める JSON を作ってもらうプロンプト。アプリの「ファイルと設定」→「AI 用のプロンプトをコピー」でも、今日の日付入りでコピーできる（プロンプトの正本はこのファイルで、`npm run build` でアプリに埋め込む）
 
 ## 無料枠（2026-10 時点）
 
