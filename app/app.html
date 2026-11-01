@@ -218,8 +218,8 @@ button { background: none; border: 0; padding: 0; cursor: pointer; }
 .sheet::before { content: ""; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--fg3); opacity: .7; z-index: 1; }
 .sheet.dragging { animation: none; transition: none; }
 .sheet.settle { transition: transform .45s var(--spring); }
-.sheet-wrap.closing { pointer-events: none; animation: scrimOut var(--t-exit) var(--ease-in) forwards; }
-.sheet-wrap.closing .sheet { animation: down var(--t-exit) var(--ease-in) forwards; }
+.sheet-wrap.closing { pointer-events: none; animation: scrimOut var(--t-exit) var(--ease-out) forwards; }
+.sheet-wrap.closing .sheet { animation: down var(--t-exit) var(--ease-out) forwards; }
 @keyframes up { from { transform: translateY(100%); } }
 @keyframes down { to { transform: translateY(100%); } }
 @keyframes scrimIn { from { background-color: transparent; } }
@@ -305,8 +305,8 @@ table.cmp th { color: var(--fg2); font-weight: 600; }
 .bn-acts button.pri, .bn-acts a.pri { background: var(--blue); color: #fff; }
 .bn-acts a.btnlike { flex: 1; min-width: 70px; border-radius: 10px; padding: 8px 6px; font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--composer-h, 130px) + 10px); z-index: 55; width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-width: 440px; box-sizing: border-box;
-  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); animation: toastIn .5s var(--spring); }
-.toast.out { animation: toastOut var(--t-exit) var(--ease-in) forwards; }
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 14px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); animation: toastIn .3s var(--ease-out); }
+.toast.out { animation: toastOut var(--t-exit) var(--ease-out) forwards; }
 @keyframes toastIn { from { transform: translate(-50%, 24px) scale(.94); opacity: 0; } }
 @keyframes toastOut { to { transform: translate(-50%, 12px) scale(.98); opacity: 0; } }
 .bot { display: flex; gap: 8px; align-items: flex-start; }
@@ -427,8 +427,8 @@ html, :root.sheet-open body { background: #000; }
 /* カレンダーで日時を選ぶ。開いているシートの上に重ねて出す */
 .cal-wrap { position: fixed; left: 0; right: 0; top: 0; height: var(--vvh, 100%); background: rgba(0,0,0,.35); z-index: 50; display: flex; align-items: flex-end; justify-content: center; animation: scrimIn .35s var(--ease-out); }
 .cal { background: var(--bg); width: 100%; max-width: 520px; max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); overflow-y: auto; overscroll-behavior: contain; border-radius: 16px 16px 0 0; animation: up .52s var(--ease-sheet); box-shadow: 0 -8px 30px rgba(0,0,0,.12); }
-.cal-wrap.closing { pointer-events: none; animation: scrimOut var(--t-exit) var(--ease-in) forwards; }
-.cal-wrap.closing .cal { animation: down var(--t-exit) var(--ease-in) forwards; }
+.cal-wrap.closing { pointer-events: none; animation: scrimOut var(--t-exit) var(--ease-out) forwards; }
+.cal-wrap.closing .cal { animation: down var(--t-exit) var(--ease-out) forwards; }
 @media (prefers-reduced-motion: reduce) { .cal, .cal-wrap { animation: none; } }
 .cal .sheet-h { position: sticky; top: 0; z-index: 1; background: var(--bg); }
 .cal-b { display: flex; flex-direction: column; gap: 12px; padding-block: 12px calc(18px + env(safe-area-inset-bottom, 0px)); }
